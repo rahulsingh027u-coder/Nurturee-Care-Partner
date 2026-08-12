@@ -472,7 +472,7 @@ export default function EarningsView() {
                           outerRadius={55}
                           dataKey="value"
                           labelLine={false}
-                          label={renderCustomLabel}
+                          label={false}
                         >
                           {pieData.map((_, index) => (
                             <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />

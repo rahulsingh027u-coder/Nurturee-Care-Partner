@@ -470,7 +470,7 @@ export default function CareTasksView() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                    className="h-9 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50"
                                     onClick={() =>
                                       updateMedStatus(med.id, 'taken')
                                     }
@@ -481,7 +481,7 @@ export default function CareTasksView() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 text-xs text-red-700 border-red-200 hover:bg-red-50"
+                                    className="h-9 text-xs text-red-700 border-red-200 hover:bg-red-50"
                                     onClick={() =>
                                       updateMedStatus(med.id, 'missed')
                                     }

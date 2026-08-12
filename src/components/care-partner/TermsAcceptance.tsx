@@ -175,8 +175,8 @@ export default function TermsAcceptance({ onAccept }: TermsAcceptanceProps) {
                 onChange={(e) => setTosAccepted(e.target.checked)}
                 className="peer sr-only"
               />
-              <div className="size-5 rounded-md border-2 border-gray-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors flex items-center justify-center">
-                {tosAccepted && <CheckCircle className="size-3.5 text-white" />}
+              <div className="size-6 rounded-md border-2 border-gray-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors flex items-center justify-center">
+                {tosAccepted && <CheckCircle className="size-4 text-white" />}
               </div>
             </div>
             <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">
@@ -199,8 +199,8 @@ export default function TermsAcceptance({ onAccept }: TermsAcceptanceProps) {
                 onChange={(e) => setPpAccepted(e.target.checked)}
                 className="peer sr-only"
               />
-              <div className="size-5 rounded-md border-2 border-gray-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors flex items-center justify-center">
-                {ppAccepted && <CheckCircle className="size-3.5 text-white" />}
+              <div className="size-6 rounded-md border-2 border-gray-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors flex items-center justify-center">
+                {ppAccepted && <CheckCircle className="size-4 text-white" />}
               </div>
             </div>
             <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">
