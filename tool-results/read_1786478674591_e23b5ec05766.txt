@@ -1,0 +1,1561 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo } from 'react';
+     4→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Label } from '@/components/ui/label';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Switch } from '@/components/ui/switch';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import {
+    13→  UserCircle,
+    14→  Star,
+    15→  MapPin,
+    16→  Phone,
+    17→  Mail,
+    18→  Shield,
+    19→  CheckCircle,
+    20→  XCircle,
+    21→  Clock,
+    22→  Edit3,
+    23→  Save,
+    24→  X,
+    25→  Camera,
+    26→  Award,
+    27→  FileCheck,
+    28→  Heart,
+    29→  Globe,
+    30→  Briefcase,
+    31→  Send,
+    32→  AlertCircle,
+    33→  Loader2,
+    34→  ArrowUpRight,
+    35→  Ban,
+    36→  Stethoscope,
+    37→  GraduationCap,
+    38→  Sparkles,
+    39→  TrendingUp,
+    40→  BadgeCheck,
+    41→  IndianRupee,
+    42→  Activity,
+    43→  Pencil,
+    44→  Plus,
+    45→  Minus,
+    46→  ChevronDown,
+    47→  MessageSquare,
+    48→  PhoneCall,
+    49→  Siren,
+    50→} from 'lucide-react';
+    51→import { mockCarePartner, mockShifts, mockReviews } from '@/lib/care-partner-data';
+    52→import SOSEmergencyDialog from './SOSEmergencyDialog';
+    53→import { getStoredOnboarding, SKILLS_CATALOG, SERVICES_CATALOG } from '@/lib/onboarding-data';
+    54→import type { SkillLevel } from '@/lib/onboarding-data';
+    55→import { VERIFICATION_STORAGE_KEY, STORAGE_VERSION_KEY, CURRENT_STORAGE_VERSION } from '@/lib/constants';
+    56→
+    57→interface SelectedSkill {
+    58→  name: string;
+    59→  level: SkillLevel;
+    60→  years: number;
+    61→}
+    62→
+    63→const LEVEL_CONFIG: Record<SkillLevel, { color: string; bg: string; border: string; label: string }> = {
+    64→  expert: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Expert' },
+    65→  advanced: { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', label: 'Advanced' },
+    66→  intermediate: { color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-200', label: 'Intermediate' },
+    67→  beginner: { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Beginner' },
+    68→};
+    69→
+    70→interface SelectedService {
+    71→  name: string;
+    72→  description: string;
+    73→}
+    74→
+    75→type VerificationType = 'aadhaar' | 'police' | 'medical' | 'video';
+    76→type VerificationStatus = 'not_started' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'max_attempts_reached';
+    77→
+    78→interface VerificationDoc {
+    79→  id: string;
+    80→  type: VerificationType;
+    81→  status: VerificationStatus;
+    82→  attempts: Array<{
+    83→    attemptNumber: number;
+    84→    submittedAt: string;
+    85→    documents: Array<{ id: string; name: string; size: number; type: string }>;
+    86→    formFields: Record<string, string>;
+    87→    status: VerificationStatus;
+    88→    reviewedAt?: string;
+    89→  }>;
+    90→  currentDraft: { documents: Array<{ id: string; name: string; size: number; type: string }>; formFields: Record<string, string> };
+    91→}
+    92→
+    93→interface ProfileViewProps {
+    94→  onNavigate?: (view: string) => void;
+    95→}
+    96→
+    97→export default function ProfileView({ onNavigate }: ProfileViewProps) {
+    98→  // Read onboarding data if available (filled during signup wizard)
+    99→  const onboardingData = typeof window !== 'undefined' ? getStoredOnboarding() : null;
+   100→
+   101→  const [isEditing, setIsEditing] = useState(false);
+   102→  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+   103→  const [editingSkills, setEditingSkills] = useState(false);
+   104→  const [selectedSkills, setSelectedSkills] = useState<SelectedSkill[]>(
+   105→    onboardingData?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) ||
+   106→      mockCarePartner.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   107→  );
+   108→  const [customSkillName, setCustomSkillName] = useState('');
+   109→  const [editingServices, setEditingServices] = useState(false);
+   110→  const [selectedServices, setSelectedServices] = useState<SelectedService[]>(
+   111→    onboardingData?.services?.map((s) => ({ name: s.name, description: s.description })) ||
+   112→      mockCarePartner.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   113→  );
+   114→  const [customServiceName, setCustomServiceName] = useState('');
+   115→  const [customServiceDescription, setCustomServiceDescription] = useState('');
+   116→  const [editingCerts, setEditingCerts] = useState(false);
+   117→  const [certifications, setCertifications] = useState<
+   118→    Array<{ name: string; issuer: string; year: number; featured: boolean }>
+   119→  >(
+   120→    onboardingData?.certifications?.map((c) => ({ ...c, featured: false })) ||
+   121→      mockCarePartner.specialistProfile?.certifications?.map((c) => ({ ...c, featured: false })) || []
+   122→  );
+   123→  const [newCertName, setNewCertName] = useState('');
+   124→  const [newCertIssuer, setNewCertIssuer] = useState('');
+   125→  const [newCertYear, setNewCertYear] = useState('');
+   126→  const [profile, setProfile] = useState({
+   127→    name: onboardingData?.name || mockCarePartner.name,
+   128→    email: onboardingData?.email || mockCarePartner.email,
+   129→    phone: onboardingData?.phone || mockCarePartner.phone,
+   130→    experience: onboardingData?.experience || mockCarePartner.experience,
+   131→    qualifications: onboardingData?.qualifications || mockCarePartner.qualifications,
+   132→    languages: onboardingData?.languages || mockCarePartner.languages.join(', '),
+   133→    bio: onboardingData?.bio || mockCarePartner.bio,
+   134→  });
+   135→  const [availability, setAvailability] = useState(
+   136→    (onboardingData?.availability || mockCarePartner.availability).map((a) => ({ ...a }))
+   137→  );
+   138→  const [isAvailable, setIsAvailable] = useState(mockCarePartner.isAvailable);
+   139→  const [sosOpen, setSosOpen] = useState(false);
+   140→
+   141→  // Read verification docs from localStorage — must match VerificationPage's storage format
+   142→
+   143→  const getStoredVerificationDocs = (): VerificationDoc[] => {
+   144→    try {
+   145→      // Version check — if storage format is outdated, clear and start fresh
+   146→      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+   147→      if (storedVersion !== String(CURRENT_STORAGE_VERSION)) {
+   148→        localStorage.removeItem(VERIFICATION_STORAGE_KEY);
+   149→        localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_STORAGE_VERSION));
+   150→        // Fall through to fresh defaults
+   151→      } else {
+   152→        const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
+   153→        if (stored) {
+   154→          const parsed = JSON.parse(stored);
+   155→          if (Array.isArray(parsed) && parsed.length === 4) {
+   156→            return parsed;
+   157→          }
+   158→        }
+   159→      }
+   160→    } catch {
+   161→      // fall through
+   162→    }
+   163→    // Fresh defaults — all NOT started (no fake approved data)
+   164→    return [
+   165→      { id: 'v-aadhaar', type: 'aadhaar', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   166→      { id: 'v-police', type: 'police', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   167→      { id: 'v-medical', type: 'medical', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   168→      { id: 'v-video', type: 'video', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   169→    ];
+   170→  };
+   171→
+   172→  const verificationDocs = useMemo(() => getStoredVerificationDocs(), []);
+   173→
+   174→  const initials = profile.name
+   175→    .split(' ')
+   176→    .map((n) => n[0])
+   177→    .join('')
+   178→    .toUpperCase();
+   179→
+   180→  const specialtyLabels: Record<string, string> = {
+   181→    elder_care: 'Elder Care',
+   182→    child_care: 'Child Care',
+   183→    office_care: 'Office Care',
+   184→    day_care: 'Day Care',
+   185→    live_in_care: 'Live-in Care',
+   186→    hourly_care: 'Hourly Care',
+   187→  };
+   188→  const specialtyLabel = specialtyLabels[mockCarePartner.specialty] || 'Care';
+   189→
+   190→  // Map verification docs to display items for the Verification Status card
+   191→  const verDisplay = [
+   192→    { title: 'Aadhaar Verification', type: 'aadhaar' as VerificationType, icon: Shield },
+   193→    { title: 'Police Verification', type: 'police' as VerificationType, icon: FileCheck },
+   194→    { title: 'Medical Fitness', type: 'medical' as VerificationType, icon: Heart },
+   195→    { title: 'Video Verification', type: 'video' as VerificationType, icon: UserCircle },
+   196→  ];
+   197→
+   198→  const allVerified = verificationDocs.every((d) => d.status === 'approved');
+   199→  const hasUnverified = verificationDocs.some((d) => d.status !== 'approved');
+   200→  const activeCount = verificationDocs.filter((d) => d.status === 'submitted' || d.status === 'under_review').length;
+   201→  const lockedCount = verificationDocs.filter((d) => d.status === 'max_attempts_reached').length;
+   202→
+   203→  // ─── Dynamic Stats (computed from shifts, reviews, profile) ──────────
+   204→  // Shifts Done = count of completed shifts
+   205→  const completedShifts = mockShifts.filter((s) => s.status === 'completed').length;
+   206→  // Active = in_progress shifts right now
+   207→  const activeAssignments = mockShifts.filter((s) => s.status === 'in_progress').length;
+   208→  // Repeat Clients = patients who appear in 2+ completed shifts
+   209→  const patientShiftCounts = new Map<string, number>();
+   210→  for (const shift of mockShifts) {
+   211→    if (shift.status === 'completed') {
+   212→      patientShiftCounts.set(shift.patientId, (patientShiftCounts.get(shift.patientId) || 0) + 1);
+   213→    }
+   214→  }
+   215→  const repeatClients = Array.from(patientShiftCounts.values()).filter((count) => count >= 2).length;
+   216→  // Rating = average from reviews
+   217→  const totalReviews = mockReviews.length;
+   218→  const ratingSum = mockReviews.reduce((acc, rv) => acc + rv.rating, 0);
+   219→  const averageRating = totalReviews > 0 ? ratingSum / totalReviews : 0;
+   220→  // Years Active = from profile experience
+   221→  const yearsActive = profile.experience;
+   222→
+   223→  const getStatusDisplay = (status: VerificationStatus) => {
+   224→    switch (status) {
+   225→      case 'approved':
+   226→        return { label: 'Verified', color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle };
+   227→      case 'submitted':
+   228→        return { label: 'Submitted', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Send };
+   229→      case 'under_review':
+   230→        return { label: 'Under Review', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock };
+   231→      case 'rejected':
+   232→        return { label: 'Rejected', color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200', icon: AlertCircle };
+   233→      case 'max_attempts_reached':
+   234→        return { label: 'Locked', color: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-300', icon: Ban };
+   235→      default:
+   236→        return { label: 'Not Verified', color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', icon: XCircle };
+   237→    }
+   238→  };
+   239→
+   240→  const handleSave = () => setIsEditing(false);
+   241→
+   242→  const handleCancel = () => {
+   243→    setProfile({
+   244→      name: onboardingData?.name || mockCarePartner.name,
+   245→      email: onboardingData?.email || mockCarePartner.email,
+   246→      phone: onboardingData?.phone || mockCarePartner.phone,
+   247→      experience: onboardingData?.experience || mockCarePartner.experience,
+   248→      qualifications: onboardingData?.qualifications || mockCarePartner.qualifications,
+   249→      languages: onboardingData?.languages || mockCarePartner.languages.join(', '),
+   250→      bio: onboardingData?.bio || mockCarePartner.bio,
+   251→    });
+   252→    setIsEditing(false);
+   253→  };
+   254→
+   255→  // ─── Skills Management ──────────────────────────────────────────────────
+   256→
+   257→  const isSkillSelected = (name: string) => selectedSkills.some((s) => s.name === name);
+   258→
+   259→  const toggleSkill = (name: string) => {
+   260→    setSelectedSkills((prev) => {
+   261→      if (prev.some((s) => s.name === name)) {
+   262→        return prev.filter((s) => s.name !== name);
+   263→      }
+   264→      return [...prev, { name, level: 'intermediate' as SkillLevel, years: 1 }];
+   265→    });
+   266→  };
+   267→
+   268→  const updateSkillLevel = (name: string, level: SkillLevel) => {
+   269→    setSelectedSkills((prev) =>
+   270→      prev.map((s) => (s.name === name ? { ...s, level } : s))
+   271→    );
+   272→  };
+   273→
+   274→  const updateSkillYears = (name: string, years: number) => {
+   275→    setSelectedSkills((prev) =>
+   276→      prev.map((s) => (s.name === name ? { ...s, years: Math.max(0, Math.min(50, years)) } : s))
+   277→    );
+   278→  };
+   279→
+   280→  const handleSaveSkills = () => {
+   281→    // In production this would save to backend
+   282→    setEditingSkills(false);
+   283→  };
+   284→
+   285→  const addCustomSkill = () => {
+   286→    const trimmed = customSkillName.trim();
+   287→    if (!trimmed || isSkillSelected(trimmed)) return;
+   288→    setSelectedSkills((prev) => [...prev, { name: trimmed, level: 'intermediate' as SkillLevel, years: 1 }]);
+   289→    setCustomSkillName('');
+   290→  };
+   291→
+   292→  const handleCancelSkills = () => {
+   293→    setSelectedSkills(
+   294→      onboardingData?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) ||
+   295→        mockCarePartner.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   296→    );
+   297→    setCustomSkillName('');
+   298→    setEditingSkills(false);
+   299→  };
+   300→
+   301→  // Group catalog skills by category (excluding already selected)
+   302→  const getCatalogByCategory = () => {
+   303→    const unselected = SKILLS_CATALOG.filter((s) => !isSkillSelected(s.name));
+   304→    const grouped: Record<string, typeof SKILLS_CATALOG[number][]> = {};
+   305→    for (const skill of unselected) {
+   306→      const cat = skill.category;
+   307→      if (!grouped[cat]) grouped[cat] = [];
+   308→      grouped[cat].push(skill);
+   309→    }
+   310→    return grouped;
+   311→  };
+   312→
+   313→  // ─── Services Management ─────────────────────────────────────────────────
+   314→
+   315→  const isServiceSelected = (name: string) => selectedServices.some((s) => s.name === name);
+   316→
+   317→  const toggleService = (name: string, description: string) => {
+   318→    setSelectedServices((prev) => {
+   319→      if (prev.some((s) => s.name === name)) {
+   320→        return prev.filter((s) => s.name !== name);
+   321→      }
+   322→      return [...prev, { name, description }];
+   323→    });
+   324→  };
+   325→
+   326→  const handleSaveServices = () => {
+   327→    setEditingServices(false);
+   328→  };
+   329→
+   330→  const addCustomService = () => {
+   331→    const name = customServiceName.trim();
+   332→    if (!name || isServiceSelected(name)) return;
+   333→    setSelectedServices((prev) => [...prev, { name, description: customServiceDescription.trim() || 'Custom service' }]);
+   334→    setCustomServiceName('');
+   335→    setCustomServiceDescription('');
+   336→  };
+   337→
+   338→  const handleCancelServices = () => {
+   339→    setSelectedServices(
+   340→      onboardingData?.services?.map((s) => ({ name: s.name, description: s.description })) ||
+   341→        mockCarePartner.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   342→    );
+   343→    setCustomServiceName('');
+   344→    setCustomServiceDescription('');
+   345→    setEditingServices(false);
+   346→  };
+   347→
+   348→  const getServicesCatalogByCategory = () => {
+   349→    const unselected = SERVICES_CATALOG.filter((s) => !isServiceSelected(s.name));
+   350→    const grouped: Record<string, typeof SERVICES_CATALOG[number][]> = {};
+   351→    for (const service of unselected) {
+   352→      const cat = service.category;
+   353→      if (!grouped[cat]) grouped[cat] = [];
+   354→      grouped[cat].push(service);
+   355→    }
+   356→    return grouped;
+   357→  };
+   358→
+   359→  // ─── Certifications Management ────────────────────────────────────────
+   360→
+   361→  const featuredCount = certifications.filter((c) => c.featured).length;
+   362→
+   363→  const toggleFeatured = (name: string) => {
+   364→    setCertifications((prev) =>
+   365→      prev.map((c) => {
+   366→        if (c.name !== name) return c;
+   367→        if (c.featured) return { ...c, featured: false };
+   368→        if (featuredCount >= 2) return c; // max 2 featured
+   369→        return { ...c, featured: true };
+   370→      })
+   371→    );
+   372→  };
+   373→
+   374→  const removeCertification = (name: string) => {
+   375→    setCertifications((prev) => prev.filter((c) => c.name !== name));
+   376→  };
+   377→
+   378→  const addCertification = () => {
+   379→    const name = newCertName.trim();
+   380→    const issuer = newCertIssuer.trim();
+   381→    const year = parseInt(newCertYear.trim(), 10);
+   382→    if (!name || !issuer || !year || year < 1950 || year > new Date().getFullYear() + 1) return;
+   383→    if (certifications.some((c) => c.name.toLowerCase() === name.toLowerCase())) return;
+   384→    setCertifications((prev) => [...prev, { name, issuer, year, featured: false }]);
+   385→    setNewCertName('');
+   386→    setNewCertIssuer('');
+   387→    setNewCertYear('');
+   388→  };
+   389→
+   390→  const handleSaveCerts = () => {
+   391→    // In production this would send to backend for verification
+   392→    // Verified certs become trust badges on the profile
+   393→    setEditingCerts(false);
+   394→  };
+   395→
+   396→  const handleCancelCerts = () => {
+   397→    setCertifications(
+   398→      onboardingData?.certifications?.map((c) => ({ ...c, featured: false })) ||
+   399→        mockCarePartner.specialistProfile?.certifications?.map((c) => ({ ...c, featured: false })) || []
+   400→    );
+   401→    setNewCertName('');
+   402→    setNewCertIssuer('');
+   403→    setNewCertYear('');
+   404→    setEditingCerts(false);
+   405→  };
+   406→
+   407→  const toggleDayAvailability = (index: number) => {
+   408→    setAvailability((prev) =>
+   409→      prev.map((day, i) => (i === index ? { ...day, isAvailable: !day.isAvailable } : day))
+   410→    );
+   411→  };
+   412→
+   413→  const handleOpenVerification = () => {
+   414→    if (onNavigate) {
+   415→      onNavigate('verification');
+   416→    }
+   417→  };
+   418→
+   419→  return (
+   420→    <div className="space-y-6 max-w-4xl mx-auto">
+   421→      {/* Section 1: Profile Header Card */}
+   422→      <Card>
+   423→        <CardContent className="p-6">
+   424→          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+   425→            <div className="flex items-center gap-4">
+   426→              <div className="relative">
+   427→                <div className="size-20 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-2xl font-bold flex items-center justify-center overflow-hidden">
+   428→                  {avatarUrl ? (
+   429→                    <img src={avatarUrl} alt="Profile" className="size-full object-cover" />
+   430→                  ) : (
+   431→                    initials
+   432→                  )}
+   433→                </div>
+   434→                {isEditing && (
+   435→                  <label className="absolute -bottom-1 -right-1 size-7 bg-white rounded-full border border-gray-200 flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+   436→                    <Camera className="size-3.5 text-gray-500" />
+   437→                    <input
+   438→                      type="file"
+   439→                      accept="image/*"
+   440→                      className="sr-only"
+   441→                      onChange={(e) => {
+   442→                        const file = e.target.files?.[0];
+   443→                        if (file) {
+   444→                          const reader = new FileReader();
+   445→                          reader.onload = (ev) => {
+   446→                            setAvatarUrl(ev.target?.result as string);
+   447→                          };
+   448→                          reader.readAsDataURL(file);
+   449→                        }
+   450→                      }}
+   451→                    />
+   452→                  </label>
+   453→                )}
+   454→              </div>
+   455→              <div className="space-y-1">
+   456→                <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
+   457→                <p className="text-xs font-mono text-gray-400">{mockCarePartner.carePartnerId}</p>
+   458→                <div className="flex flex-wrap items-center gap-2 pt-1">
+   459→                  <Badge className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 hover:bg-blue-100 border-0">
+   460→                    {specialtyLabel}
+   461→                  </Badge>
+   462→                  <div className="flex items-center gap-1">
+   463→                    <Star className="size-3.5 text-amber-400 fill-amber-400" />
+   464→                    <span className="text-sm font-medium text-gray-700">{averageRating.toFixed(1)}</span>
+   465→                    <span className="text-xs text-gray-500">({totalReviews} reviews)</span>
+   466→                  </div>
+   467→                </div>
+   468→                <div className="flex items-center gap-1.5 text-sm text-gray-500 pt-0.5">
+   469→                  <MapPin className="size-3.5" />
+   470→                  <span>{mockCarePartner.area}</span>
+   471→                </div>
+   472→              </div>
+   473→            </div>
+   474→            {!isEditing ? (
+   475→              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-2">
+   476→                <Edit3 className="size-4" />
+   477→                Edit Profile
+   478→              </Button>
+   479→            ) : (
+   480→              <div className="flex gap-2">
+   481→                <Button size="sm" onClick={handleSave} className="gap-2">
+   482→                  <Save className="size-4" />
+   483→                  Save
+   484→                </Button>
+   485→                <Button variant="outline" size="sm" onClick={handleCancel} className="gap-2">
+   486→                  <X className="size-4" />
+   487→                  Cancel
+   488→                </Button>
+   489→              </div>
+   490→            )}
+   491→          </div>
+   492→        </CardContent>
+   493→      </Card>
+   494→
+   495→      {/* Section 2: Personal Information Card */}
+   496→      <Card>
+   497→        <CardHeader className="pb-4">
+   498→          <div className="flex items-center justify-between">
+   499→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   500→              <Briefcase className="size-5 text-gray-400" />
+   501→              Personal Information
+   502→            </CardTitle>
+   503→            {!isEditing && (
+   504→              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)} className="gap-1.5 text-gray-500 hover:text-gray-700">
+   505→                <Edit3 className="size-3.5" />
+   506→                Edit
+   507→              </Button>
+   508→            )}
+   509→          </div>
+   510→        </CardHeader>
+   511→        <Separator />
+   512→        <CardContent className="p-6">
+   513→          {!isEditing ? (
+   514→            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   515→              {[
+   516→                { label: 'Full Name', value: profile.name },
+   517→                { label: 'Email', value: profile.email, icon: Mail },
+   518→                { label: 'Phone', value: profile.phone, icon: Phone },
+   519→                { label: 'Experience', value: `${profile.experience} years` },
+   520→                { label: 'Qualifications', value: profile.qualifications },
+   521→                { label: 'Languages', value: profile.languages, icon: Globe },
+   522→              ].map((item) => (
+   523→                <div key={item.label} className="space-y-1">
+   524→                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{item.label}</p>
+   525→                  <div className="flex items-center gap-1.5">
+   526→                    {'icon' in item && item.icon && <item.icon className="size-3.5 text-gray-400" />}
+   527→                    <p className="text-sm font-medium text-gray-900">{item.value}</p>
+   528→                  </div>
+   529→                </div>
+   530→              ))}
+   531→            </div>
+   532→          ) : (
+   533→            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+   534→              {[
+   535→                { id: 'edit-name', label: 'Full Name', value: profile.name, key: 'name' as const, type: 'text' },
+   536→                { id: 'edit-email', label: 'Email', value: profile.email, key: 'email' as const, type: 'email' },
+   537→                { id: 'edit-phone', label: 'Phone', value: profile.phone, key: 'phone' as const, type: 'tel' },
+   538→                { id: 'edit-experience', label: 'Experience (years)', value: profile.experience, key: 'experience' as const, type: 'number' },
+   539→              ].map((field) => (
+   540→                <div key={field.id} className="space-y-2">
+   541→                  <Label htmlFor={field.id} className="text-xs font-medium text-gray-500">{field.label}</Label>
+   542→                  <Input
+   543→                    id={field.id}
+   544→                    type={field.type}
+   545→                    value={field.value}
+   546→                    onChange={(e) =>
+   547→                      setProfile((p) => ({
+   548→                        ...p,
+   549→                        [field.key]: field.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value,
+   550→                      }))
+   551→                    }
+   552→                  />
+   553→                </div>
+   554→              ))}
+   555→              <div className="space-y-2 md:col-span-2">
+   556→                <Label htmlFor="edit-qualifications" className="text-xs font-medium text-gray-500">Qualifications</Label>
+   557→                <Input
+   558→                  id="edit-qualifications"
+   559→                  value={profile.qualifications}
+   560→                  onChange={(e) => setProfile((p) => ({ ...p, qualifications: e.target.value }))}
+   561→                />
+   562→              </div>
+   563→              <div className="space-y-2 md:col-span-2">
+   564→                <Label htmlFor="edit-languages" className="text-xs font-medium text-gray-500">Languages (comma-separated)</Label>
+   565→                <Input
+   566→                  id="edit-languages"
+   567→                  value={profile.languages}
+   568→                  onChange={(e) => setProfile((p) => ({ ...p, languages: e.target.value }))}
+   569→                  placeholder="English, Hindi, Punjabi"
+   570→                />
+   571→              </div>
+   572→            </div>
+   573→          )}
+   574→        </CardContent>
+   575→      </Card>
+   576→
+   577→      {/* Section 3: Specialist Profile Card */}
+   578→      {mockCarePartner.specialistProfile && (
+   579→        <Card>
+   580→          <CardHeader className="pb-4">
+   581→            <div className="flex items-center justify-between">
+   582→              <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   583→                <Stethoscope className="size-5 text-gray-400" />
+   584→                {mockCarePartner.specialistProfile.title}
+   585→              </CardTitle>
+   586→              <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-full px-3 py-1 hover:from-blue-100 hover:to-indigo-100 border border-blue-200/60">
+   587→                <Sparkles className="size-3 mr-1" />
+   588→                {specialtyLabel}
+   589→              </Badge>
+   590→            </div>
+   591→          </CardHeader>
+   592→          <Separator />
+   593→          <CardContent className="p-6 space-y-6">
+   594→            {/* Tagline */}
+   595→            <p className="text-sm text-gray-600 leading-relaxed">{mockCarePartner.specialistProfile.tagline}</p>
+   596→
+   597→            {/* Stats Grid */}
+   598→            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+   599→              {[
+   600→                { label: 'Shifts Done', value: completedShifts.toLocaleString('en-IN'), icon: Activity, color: 'text-blue-600', bg: 'bg-blue-50' },
+   601→                { label: 'Active', value: activeAssignments, icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   602→                { label: 'Repeat Clients', value: repeatClients, icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50' },
+   603→                { label: 'Rating', value: averageRating.toFixed(1), icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
+   604→                { label: 'Reviews', value: totalReviews, icon: Award, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+   605→                { label: 'Years', value: yearsActive, icon: GraduationCap, color: 'text-teal-600', bg: 'bg-teal-50' },
+   606→              ].map((stat) => {
+   607→                const StatIcon = stat.icon;
+   608→                return (
+   609→                  <div key={stat.label} className="text-center rounded-xl border border-gray-100 bg-white p-3">
+   610→                    <div className={`size-8 rounded-lg ${stat.bg} flex items-center justify-center mx-auto mb-1.5`}>
+   611→                      <StatIcon className={`size-4 ${stat.color}`} />
+   612→                    </div>
+   613→                    <p className="text-base font-bold text-gray-900">{stat.value}</p>
+   614→                    <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{stat.label}</p>
+   615→                  </div>
+   616→                );
+   617→              })}
+   618→            </div>
+   619→
+   620→            {/* Skills */}
+   621→            <div>
+   622→              <div className="flex items-center justify-between mb-3">
+   623→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   624→                  <Sparkles className="size-4 text-gray-400" />
+   625→                  Core Skills & Expertise
+   626→                  {selectedSkills.length > 0 && (
+   627→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   628→                      {selectedSkills.length} selected
+   629→                    </Badge>
+   630→                  )}
+   631→                </h3>
+   632→                {!editingSkills ? (
+   633→                  <Button
+   634→                    variant="ghost"
+   635→                    size="sm"
+   636→                    onClick={() => setEditingSkills(true)}
+   637→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   638→                  >
+   639→                    <Pencil className="size-3" />
+   640→                    <span className="text-xs">Edit</span>
+   641→                  </Button>
+   642→                ) : (
+   643→                  <div className="flex items-center gap-1">
+   644→                    <Button
+   645→                      variant="ghost"
+   646→                      size="sm"
+   647→                      onClick={handleCancelSkills}
+   648→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   649→                    >
+   650→                      <span className="text-xs">Cancel</span>
+   651→                    </Button>
+   652→                    <Button
+   653→                      size="sm"
+   654→                      onClick={handleSaveSkills}
+   655→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   656→                    >
+   657→                      <Save className="size-3" />
+   658→                      Save
+   659→                    </Button>
+   660→                  </div>
+   661→                )}
+   662→              </div>
+   663→
+   664→              {!editingSkills ? (
+   665→                /* ─── View Mode: Skill badges ─── */
+   666→                <div className="flex flex-wrap gap-2">
+   667→                  {selectedSkills.length === 0 ? (
+   668→                    <p className="text-xs text-gray-400 italic">No skills added yet. Tap Edit to add your skills.</p>
+   669→                  ) : (
+   670→                    selectedSkills.map((skill) => {
+   671→                      const lvl = LEVEL_CONFIG[skill.level];
+   672→                      return (
+   673→                        <div
+   674→                          key={skill.name}
+   675→                          className={`inline-flex items-center gap-1.5 rounded-lg border ${lvl.border} ${lvl.bg} px-3 py-1.5 cursor-default`}
+   676→                        >
+   677→                          <BadgeCheck className={`size-3.5 ${lvl.color}`} />
+   678→                          <span className={`text-xs font-medium ${lvl.color}`}>{skill.name}</span>
+   679→                          <span className="text-[10px] text-gray-400 font-medium">{skill.years}y</span>
+   680→                        </div>
+   681→                      );
+   682→                    })
+   683→                  )}
+   684→                </div>
+   685→              ) : (
+   686→                /* ─── Edit Mode: Selected skills with level/years + catalog ─── */
+   687→                <div className="space-y-4">
+   688→                  {/* Already selected skills — editable cards */}
+   689→                  {selectedSkills.length > 0 && (
+   690→                    <div className="space-y-2">
+   691→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Skills</p>
+   692→                      {selectedSkills.map((skill) => {
+   693→                        const lvl = LEVEL_CONFIG[skill.level];
+   694→                        return (
+   695→                          <div
+   696→                            key={skill.name}
+   697→                            className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border ${lvl.border} ${lvl.bg} p-3`}
+   698→                          >
+   699→                            <div className="flex items-center gap-2 flex-1 min-w-0">
+   700→                              <BadgeCheck className={`size-4 ${lvl.color} shrink-0`} />
+   701→                              <span className="text-sm font-medium text-gray-900 truncate">{skill.name}</span>
+   702→                            </div>
+   703→                            <div className="flex items-center gap-2 shrink-0">
+   704→                              {/* Level dropdown */}
+   705→                              <div className="relative">
+   706→                                <select
+   707→                                  value={skill.level}
+   708→                                  onChange={(e) => updateSkillLevel(skill.name, e.target.value as SkillLevel)}
+   709→                                  className={`appearance-none rounded-lg border ${lvl.border} bg-white px-2.5 py-1.5 pr-7 text-xs font-medium ${lvl.color} cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500`}
+   710→                                >
+   711→                                  <option value="beginner">Beginner</option>
+   712→                                  <option value="intermediate">Intermediate</option>
+   713→                                  <option value="advanced">Advanced</option>
+   714→                                  <option value="expert">Expert</option>
+   715→                                </select>
+   716→                                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-3 pointer-events-none text-gray-400" />
+   717→                              </div>
+   718→                              {/* Years input */}
+   719→                              <div className="flex items-center gap-1">
+   720→                                <Input
+   721→                                  type="number"
+   722→                                  min={0}
+   723→                                  max={50}
+   724→                                  value={skill.years}
+   725→                                  onChange={(e) => updateSkillYears(skill.name, parseInt(e.target.value) || 0)}
+   726→                                  className="w-14 h-8 text-xs text-center rounded-lg border-gray-200"
+   727→                                />
+   728→                                <span className="text-[10px] text-gray-400 font-medium">yrs</span>
+   729→                              </div>
+   730→                              {/* Remove button */}
+   731→                              <button
+   732→                                type="button"
+   733→                                onClick={() => toggleSkill(skill.name)}
+   734→                                className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+   735→                              >
+   736→                                <Minus className="size-3.5" />
+   737→                              </button>
+   738→                            </div>
+   739→                          </div>
+   740→                        );
+   741→                      })}
+   742→                    </div>
+   743→                  )}
+   744→
+   745→                  {/* Add more skills from catalog */}
+   746→                  {(() => {
+   747→                    const catalog = getCatalogByCategory();
+   748→                    const hasCatalog = Object.keys(catalog).length > 0;
+   749→                    if (!hasCatalog) return null;
+   750→                    return (
+   751→                      <div className="space-y-2">
+   752→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Skills</p>
+   753→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   754→                          {Object.entries(catalog).map(([category, skills]) => (
+   755→                            <div key={category} className="mb-3 last:mb-0">
+   756→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   757→                              <div className="flex flex-wrap gap-1.5">
+   758→                                {skills.map((skill) => (
+   759→                                  <button
+   760→                                    key={skill.name}
+   761→                                    type="button"
+   762→                                    onClick={() => toggleSkill(skill.name)}
+   763→                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors active:scale-[0.97]"
+   764→                                  >
+   765→                                    <Plus className="size-3" />
+   766→                                    {skill.name}
+   767→                                  </button>
+   768→                                ))}
+   769→                              </div>
+   770→                            </div>
+   771→                          ))}
+   772→                        </div>
+   773→                      </div>
+   774→                    );
+   775→                  })()}
+   776→
+   777→                  {/* Add custom skill (Other) */}
+   778→                  <div className="space-y-2">
+   779→                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Other</p>
+   780→                    <div className="flex items-center gap-2">
+   781→                      <Input
+   782→                        type="text"
+   783→                        value={customSkillName}
+   784→                        onChange={(e) => setCustomSkillName(e.target.value)}
+   785→                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomSkill(); } }}
+   786→                        placeholder="Type a custom skill name..."
+   787→                        className="flex-1 h-9 text-sm rounded-lg border-gray-200"
+   788→                      />
+   789→                      <Button
+   790→                        type="button"
+   791→                        variant="outline"
+   792→                        size="sm"
+   793→                        onClick={addCustomSkill}
+   794→                        disabled={!customSkillName.trim() || isSkillSelected(customSkillName.trim())}
+   795→                        className="gap-1.5 h-9 px-3 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+   796→                      >
+   797→                        <Plus className="size-3.5" />
+   798→                        <span className="text-xs">Add</span>
+   799→                      </Button>
+   800→                    </div>
+   801→                    {customSkillName.trim() && isSkillSelected(customSkillName.trim()) && (
+   802→                      <p className="text-[10px] text-amber-600">This skill is already in your list.</p>
+   803→                    )}
+   804→                  </div>
+   805→                </div>
+   806→              )}
+   807→            </div>
+   808→
+   809→            {/* Services Offered */}
+   810→            <div>
+   811→              <div className="flex items-center justify-between mb-3">
+   812→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   813→                  <IndianRupee className="size-4 text-gray-400" />
+   814→                  Services Offered
+   815→                  {selectedServices.length > 0 && (
+   816→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   817→                      {selectedServices.length} active
+   818→                    </Badge>
+   819→                  )}
+   820→                </h3>
+   821→                {!editingServices ? (
+   822→                  <Button
+   823→                    variant="ghost"
+   824→                    size="sm"
+   825→                    onClick={() => setEditingServices(true)}
+   826→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   827→                  >
+   828→                    <Pencil className="size-3" />
+   829→                    <span className="text-xs">Edit</span>
+   830→                  </Button>
+   831→                ) : (
+   832→                  <div className="flex items-center gap-1">
+   833→                    <Button
+   834→                      variant="ghost"
+   835→                      size="sm"
+   836→                      onClick={handleCancelServices}
+   837→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   838→                    >
+   839→                      <span className="text-xs">Cancel</span>
+   840→                    </Button>
+   841→                    <Button
+   842→                      size="sm"
+   843→                      onClick={handleSaveServices}
+   844→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   845→                    >
+   846→                      <Save className="size-3" />
+   847→                      Save
+   848→                    </Button>
+   849→                  </div>
+   850→                )}
+   851→              </div>
+   852→
+   853→              {!editingServices ? (
+   854→                /* ─── View Mode ─── */
+   855→                <div className="space-y-2">
+   856→                  {selectedServices.length === 0 ? (
+   857→                    <p className="text-xs text-gray-400 italic">No services added yet. Tap Edit to add services you offer.</p>
+   858→                  ) : (
+   859→                    selectedServices.map((service) => (
+   860→                      <div
+   861→                        key={service.name}
+   862→                        className="rounded-lg border border-gray-100 bg-white p-3 hover:border-gray-200 hover:shadow-sm transition-all"
+   863→                      >
+   864→                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   865→                        <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   866→                      </div>
+   867→                    ))
+   868→                  )}
+   869→                </div>
+   870→              ) : (
+   871→                /* ─── Edit Mode ─── */
+   872→                <div className="space-y-4">
+   873→                  {/* Selected services — removable cards */}
+   874→                  {selectedServices.length > 0 && (
+   875→                    <div className="space-y-2">
+   876→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Services</p>
+   877→                      {selectedServices.map((service) => (
+   878→                        <div
+   879→                          key={service.name}
+   880→                          className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3"
+   881→                        >
+   882→                          <div className="flex-1 min-w-0">
+   883→                            <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   884→                            <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   885→                          </div>
+   886→                          <button
+   887→                            type="button"
+   888→                            onClick={() => toggleService(service.name, service.description)}
+   889→                            className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+   890→                          >
+   891→                            <Minus className="size-3.5" />
+   892→                          </button>
+   893→                        </div>
+   894→                      ))}
+   895→                    </div>
+   896→                  )}
+   897→
+   898→                  {/* Add more services from catalog */}
+   899→                  {(() => {
+   900→                    const catalog = getServicesCatalogByCategory();
+   901→                    const hasCatalog = Object.keys(catalog).length > 0;
+   902→                    if (!hasCatalog) return null;
+   903→                    return (
+   904→                      <div className="space-y-2">
+   905→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Services</p>
+   906→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   907→                          {Object.entries(catalog).map(([category, services]) => (
+   908→                            <div key={category} className="mb-3 last:mb-0">
+   909→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   910→                              <div className="flex flex-col gap-1.5">
+   911→                                {services.map((service) => (
+   912→                                  <button
+   913→                                    key={service.name}
+   914→                                    type="button"
+   915→                                    onClick={() => toggleService(service.name, service.description)}
+   916→                                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2.5 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors active:scale-[0.99]"
+   917→                                  >
+   918→                                    <div className="size-6 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
+   919→                                      <Plus className="size-3 text-blue-500" />
+   920→                                    </div>
+   921→                                    <div className="flex-1 min-w-0">
+   922→                                      <p className="text-xs font-medium text-gray-700">{service.name}</p>
+   923→                                      <p className="text-[10px] text-gray-400 truncate">{service.description}</p>
+   924→                                    </div>
+   925→                                  </button>
+   926→                                ))}
+   927→                              </div>
+   928→                            </div>
+   929→                          ))}
+   930→                        </div>
+   931→                      </div>
+   932→                    );
+   933→                  })()}
+   934→
+   935→                  {/* Add custom service (Other) */}
+   936→                  <div className="space-y-2">
+   937→                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Other</p>
+   938→                    <div className="space-y-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3">
+   939→                      <div className="flex items-center gap-2">
+   940→                        <Input
+   941→                          type="text"
+   942→                          value={customServiceName}
+   943→                          onChange={(e) => setCustomServiceName(e.target.value)}
+   944→                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+   945→                          placeholder="Service name..."
+   946→                          className="flex-1 h-9 text-sm rounded-lg border-gray-200"
+   947→                        />
+   948→                      </div>
+   949→                      <Input
+   950→                        type="text"
+   951→                        value={customServiceDescription}
+   952→                        onChange={(e) => setCustomServiceDescription(e.target.value)}
+   953→                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+   954→                        placeholder="Short description (optional)..."
+   955→                        className="h-9 text-sm rounded-lg border-gray-200"
+   956→                      />
+   957→                      <div className="flex items-center justify-between">
+   958→                        {customServiceName.trim() && isServiceSelected(customServiceName.trim()) && (
+   959→                          <p className="text-[10px] text-amber-600">This service is already in your list.</p>
+   960→                        )}
+   961→                        <div className="ml-auto">
+   962→                          <Button
+   963→                            type="button"
+   964→                            variant="outline"
+   965→                            size="sm"
+   966→                            onClick={addCustomService}
+   967→                            disabled={!customServiceName.trim() || isServiceSelected(customServiceName.trim())}
+   968→                            className="gap-1.5 h-8 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+   969→                          >
+   970→                            <Plus className="size-3.5" />
+   971→                            <span className="text-xs">Add Service</span>
+   972→                          </Button>
+   973→                        </div>
+   974→                      </div>
+   975→                    </div>
+   976→                  </div>
+   977→                </div>
+   978→              )}
+   979→            </div>
+   980→
+   981→            {/* Reviews & Ratings */}
+   982→            <div>
+   983→              <div className="flex items-center justify-between mb-3">
+   984→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   985→                  <MessageSquare className="size-4 text-gray-400" />
+   986→                  Reviews & Ratings
+   987→                  {totalReviews > 0 && (
+   988→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   989→                      {totalReviews} reviews
+   990→                    </Badge>
+   991→                  )}
+   992→                </h3>
+   993→                {totalReviews > 0 && (
+   994→                  <div className="flex items-center gap-1">
+   995→                    <Star className="size-3.5 text-amber-400 fill-amber-400" />
+   996→                    <span className="text-sm font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
+   997→                    <span className="text-[10px] text-gray-400">/ 5</span>
+   998→                  </div>
+   999→                )}
+  1000→              </div>
+  1001→
+  1002→              {totalReviews === 0 ? (
+  1003→                <p className="text-xs text-gray-400 italic">No reviews yet. Reviews from customers will appear here.</p>
+  1004→              ) : (
+  1005→                <>
+  1006→                  <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1 scrollbar-thin">
+  1007→                    {mockReviews
+  1008→                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  1009→                      .slice(0, 5)
+  1010→                      .map((review) => (
+  1011→                        <div
+  1012→                          key={review.id}
+  1013→                          className="rounded-lg border border-gray-100 bg-white p-3 hover:border-gray-200 hover:shadow-sm transition-all"
+  1014→                        >
+  1015→                          <div className="flex items-start justify-between gap-2 mb-1.5">
+  1016→                            <div className="flex items-center gap-2">
+  1017→                              <div className="size-7 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700 text-[10px] font-bold flex items-center justify-center">
+  1018→                                {review.patientName.split(' ').map((n) => n[0]).join('')}
+  1019→                              </div>
+  1020→                              <div>
+  1021→                                <p className="text-xs font-semibold text-gray-900">{review.patientName}</p>
+  1022→                                {review.serviceType && (
+  1023→                                  <p className="text-[10px] text-gray-400">{review.serviceType}</p>
+  1024→                                )}
+  1025→                              </div>
+  1026→                            </div>
+  1027→                            <div className="flex items-center gap-1 shrink-0">
+  1028→                              {Array.from({ length: 5 }).map((_, i) => (
+  1029→                                <Star
+  1030→                                  key={i}
+  1031→                                  className={`size-3 ${i < review.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`}
+  1032→                                />
+  1033→                              ))}
+  1034→                            </div>
+  1035→                          </div>
+  1036→                          <p className="text-xs text-gray-600 leading-relaxed">{review.comment}</p>
+  1037→                          <p className="text-[10px] text-gray-400 mt-1.5">
+  1038→                            {new Date(review.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1039→                          </p>
+  1040→                        </div>
+  1041→                      ))}
+  1042→                  </div>
+  1043→                  {totalReviews > 5 && (
+  1044→                    <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-400 bg-gray-50 rounded-lg py-2.5 px-3 border border-dashed border-gray-200">
+  1045→                      <ArrowUpRight className="size-3" />
+  1046→                      <span>Showing latest 5 of {totalReviews} reviews</span>
+  1047→                    </div>
+  1048→                  )}
+  1049→                  <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-indigo-500 bg-indigo-50 rounded-lg py-2.5 px-3">
+  1050→                    <Globe className="size-3" />
+  1051→                    <span className="font-medium">View all reviews on Customer App</span>
+  1052→                  </div>
+  1053→                </>
+  1054→              )}
+  1055→            </div>
+  1056→
+  1057→            {/* Certifications */}
+  1058→            <div>
+  1059→              <div className="flex items-center justify-between mb-3">
+  1060→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+  1061→                  <GraduationCap className="size-4 text-gray-400" />
+  1062→                  Certifications & Training
+  1063→                  {certifications.length > 0 && (
+  1064→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+  1065→                      {certifications.length} added
+  1066→                    </Badge>
+  1067→                  )}
+  1068→                  {featuredCount > 0 && (
+  1069→                    <Badge className="text-[10px] text-amber-700 border-amber-200 bg-amber-50 px-1.5 py-0">
+  1070→                      {featuredCount} featured
+  1071→                    </Badge>
+  1072→                  )}
+  1073→                </h3>
+  1074→                {!editingCerts ? (
+  1075→                  <Button
+  1076→                    variant="ghost"
+  1077→                    size="sm"
+  1078→                    onClick={() => setEditingCerts(true)}
+  1079→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+  1080→                  >
+  1081→                    <Pencil className="size-3" />
+  1082→                    <span className="text-xs">Edit</span>
+  1083→                  </Button>
+  1084→                ) : (
+  1085→                  <div className="flex items-center gap-1">
+  1086→                    <Button
+  1087→                      variant="ghost"
+  1088→                      size="sm"
+  1089→                      onClick={handleCancelCerts}
+  1090→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+  1091→                    >
+  1092→                      <span className="text-xs">Cancel</span>
+  1093→                    </Button>
+  1094→                    <Button
+  1095→                      size="sm"
+  1096→                      onClick={handleSaveCerts}
+  1097→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+  1098→                    >
+  1099→                      <Save className="size-3" />
+  1100→                      Save
+  1101→                    </Button>
+  1102→                  </div>
+  1103→                )}
+  1104→              </div>
+  1105→
+  1106→              {!editingCerts ? (
+  1107→                /* ─── View Mode ─── */
+  1108→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1109→                  {certifications.length === 0 ? (
+  1110→                    <p className="text-xs text-gray-400 italic col-span-full">No certifications added yet. Tap Edit to add your certifications.</p>
+  1111→                  ) : (
+  1112→                    certifications.map((cert) => (
+  1113→                      <div
+  1114→                        key={cert.name}
+  1115→                        className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${
+  1116→                          cert.featured
+  1117→                            ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-white shadow-sm'
+  1118→                            : 'border-gray-100 bg-white'
+  1119→                        }`}
+  1120→                      >
+  1121→                        <div className={`size-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+  1122→                          cert.featured ? 'bg-amber-100' : 'bg-emerald-50'
+  1123→                        }`}>
+  1124→                          {cert.featured ? (
+  1125→                            <Award className="size-4 text-amber-600" />
+  1126→                          ) : (
+  1127→                            <BadgeCheck className="size-4 text-emerald-600" />
+  1128→                          )}
+  1129→                        </div>
+  1130→                        <div className="min-w-0">
+  1131→                          <div className="flex items-center gap-1.5">
+  1132→                            <p className="text-xs font-semibold text-gray-900">{cert.name}</p>
+  1133→                            {cert.featured && (
+  1134→                              <Badge className="text-[9px] leading-none text-amber-700 border-amber-200 bg-amber-100 px-1 py-0 h-3.5">
+  1135→                                Featured
+  1136→                              </Badge>
+  1137→                            )}
+  1138→                          </div>
+  1139→                          <p className="text-[11px] text-gray-500">{cert.issuer}</p>
+  1140→                          <p className="text-[10px] text-gray-400 mt-0.5">{cert.year}</p>
+  1141→                        </div>
+  1142→                      </div>
+  1143→                    ))
+  1144→                  )}
+  1145→                </div>
+  1146→              ) : (
+  1147→                /* ─── Edit Mode ─── */
+  1148→                <div className="space-y-3">
+  1149→                  {/* Info note */}
+  1150→                  <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 p-2.5">
+  1151→                    <AlertCircle className="size-3.5 text-blue-500 shrink-0 mt-0.5" />
+  1152→                    <p className="text-[11px] text-blue-700 leading-relaxed">
+  1153→                      Add your certifications below. You can feature up to 2 on your profile — these will be displayed as trust badges once verified by our team.
+  1154→                    </p>
+  1155→                  </div>
+  1156→
+  1157→                  {/* Existing certs list */}
+  1158→                  <div className="space-y-2">
+  1159→                    {certifications.map((cert) => (
+  1160→                      <div
+  1161→                        key={cert.name}
+  1162→                        className={`rounded-lg border p-3 transition-all ${
+  1163→                          cert.featured
+  1164→                            ? 'border-amber-200 bg-gradient-to-r from-amber-50 to-white'
+  1165→                            : 'border-gray-100 bg-white'
+  1166→                        }`}
+  1167→                      >
+  1168→                        <div className="flex items-start justify-between gap-2">
+  1169→                          <div className="min-w-0 flex-1">
+  1170→                            <div className="flex items-center gap-1.5 mb-0.5">
+  1171→                              <p className="text-xs font-semibold text-gray-900">{cert.name}</p>
+  1172→                              {cert.featured && (
+  1173→                                <Badge className="text-[9px] leading-none text-amber-700 border-amber-200 bg-amber-100 px-1 py-0 h-3.5">
+  1174→                                  Featured
+  1175→                                </Badge>
+  1176→                              )}
+  1177→                            </div>
+  1178→                            <p className="text-[11px] text-gray-500">{cert.issuer} &middot; {cert.year}</p>
+  1179→                          </div>
+  1180→                          <div className="flex items-center gap-1 shrink-0">
+  1181→                            <Button
+  1182→                              variant={cert.featured ? 'default' : 'outline'}
+  1183→                              size="sm"
+  1184→                              onClick={() => toggleFeatured(cert.name)}
+  1185→                              disabled={!cert.featured && featuredCount >= 2}
+  1186→                              className={`gap-1 h-7 px-2 text-[10px] ${
+  1187→                                cert.featured
+  1188→                                  ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500'
+  1189→                                  : 'text-gray-500 border-gray-200 hover:text-amber-600 hover:border-amber-300'
+  1190→                              } ${!cert.featured && featuredCount >= 2 ? 'opacity-40 cursor-not-allowed' : ''}`}
+  1191→                              title={featuredCount >= 2 && !cert.featured ? 'Maximum 2 featured certifications reached' : 'Feature on profile'}
+  1192→                            >
+  1193→                              <Award className="size-3" />
+  1194→                              {cert.featured ? 'Featured' : 'Feature'}
+  1195→                            </Button>
+  1196→                            <Button
+  1197→                              variant="ghost"
+  1198→                              size="sm"
+  1199→                              onClick={() => removeCertification(cert.name)}
+  1200→                              className="h-7 px-1.5 text-gray-400 hover:text-red-500"
+  1201→                            >
+  1202→                              <Minus className="size-3.5" />
+  1203→                            </Button>
+  1204→                          </div>
+  1205→                        </div>
+  1206→                      </div>
+  1207→                    ))}
+  1208→                  </div>
+  1209→
+  1210→                  {/* Add new certification form */}
+  1211→                  <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 p-3 space-y-2">
+  1212→                    <p className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+  1213→                      <Plus className="size-3" />
+  1214→                      Add New Certification
+  1215→                    </p>
+  1216→                    <div className="space-y-1.5">
+  1217→                      <Input
+  1218→                        placeholder="Certification name"
+  1219→                        value={newCertName}
+  1220→                        onChange={(e) => setNewCertName(e.target.value)}
+  1221→                        className="h-8 text-xs"
+  1222→                      />
+  1223→                      <Input
+  1224→                        placeholder="Issuing organization"
+  1225→                        value={newCertIssuer}
+  1226→                        onChange={(e) => setNewCertIssuer(e.target.value)}
+  1227→                        className="h-8 text-xs"
+  1228→                      />
+  1229→                      <Input
+  1230→                        placeholder="Year (e.g. 2024)"
+  1231→                        value={newCertYear}
+  1232→                        onChange={(e) => setNewCertYear(e.target.value)}
+  1233→                        className="h-8 text-xs"
+  1234→                        type="number"
+  1235→                        min="1950"
+  1236→                        max={new Date().getFullYear() + 1}
+  1237→                      />
+  1238→                    </div>
+  1239→                    <Button
+  1240→                      size="sm"
+  1241→                      onClick={addCertification}
+  1242→                      disabled={!newCertName.trim() || !newCertIssuer.trim() || !newCertYear.trim()}
+  1243→                      className="gap-1 h-7 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs w-full"
+  1244→                    >
+  1245→                      <Plus className="size-3" />
+  1246→                      Add Certification
+  1247→                    </Button>
+  1248→                  </div>
+  1249→                </div>
+  1250→              )}
+  1251→            </div>
+  1252→          </CardContent>
+  1253→        </Card>
+  1254→      )}
+  1255→
+  1256→      {/* Section 4: Availability Card */}
+  1257→      <Card>
+  1258→        <CardHeader className="pb-4">
+  1259→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1260→            <Clock className="size-5 text-gray-400" />
+  1261→            Weekly Availability
+  1262→          </CardTitle>
+  1263→        </CardHeader>
+  1264→        <Separator />
+  1265→        <CardContent className="p-6">
+  1266→          <div className="flex items-center justify-between mb-5">
+  1267→            <div>
+  1268→              <p className="text-sm font-medium text-gray-900">I am available for assignments</p>
+  1269→              <p className="text-xs text-gray-500 mt-0.5">
+  1270→                {isAvailable ? 'You will receive new assignment notifications' : 'You will not receive new assignments'}
+  1271→              </p>
+  1272→            </div>
+  1273→            <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
+  1274→          </div>
+  1275→          <div className="space-y-2">
+  1276→            {availability.map((day, index) => (
+  1277→              <div
+  1278→                key={day.day}
+  1279→                className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 transition-colors ${
+  1280→                  day.isAvailable ? 'bg-blue-50/50' : 'bg-white'
+  1281→                }`}
+  1282→              >
+  1283→                <div className="flex items-center gap-3">
+  1284→                  <span className={`text-sm font-medium ${day.isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>{day.day}</span>
+  1285→                  {day.isAvailable && <span className="text-xs text-gray-500">{day.startTime} - {day.endTime}</span>}
+  1286→                </div>
+  1287→                <Switch checked={day.isAvailable} onCheckedChange={() => toggleDayAvailability(index)} />
+  1288→              </div>
+  1289→            ))}
+  1290→          </div>
+  1291→        </CardContent>
+  1292→      </Card>
+  1293→
+  1294→      {/* Section 5: Verification Status Card */}
+  1295→      <Card>
+  1296→        <CardHeader className="pb-4">
+  1297→          <div className="flex items-center justify-between">
+  1298→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1299→              <Shield className="size-5 text-gray-400" />
+  1300→              Verification Status
+  1301→            </CardTitle>
+  1302→            <Badge
+  1303→              className={`rounded-full px-3 py-1 border ${
+  1304→                allVerified
+  1305→                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1306→                  : activeCount > 0
+  1307→                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+  1308→                    : lockedCount > 0
+  1309→                      ? 'bg-gray-100 text-gray-600 border-gray-300'
+  1310→                      : 'bg-amber-50 text-amber-700 border-amber-200'
+  1311→              }`}
+  1312→            >
+  1313→              {allVerified ? 'Fully Verified' : activeCount > 0 ? 'In Progress' : lockedCount > 0 ? 'Verification Locked' : verificationDocs.some(d => d.status === 'approved') ? 'Partially Verified' : 'Not Verified'}
+  1314→            </Badge>
+  1315→          </div>
+  1316→        </CardHeader>
+  1317→        <Separator />
+  1318→        <CardContent className="p-6">
+  1319→          {/* Table-like verification list with clear columns */}
+  1320→          <div className="space-y-2">
+  1321→            {/* Header row */}
+  1322→            <div className="hidden sm:grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+  1323→              <span>Document</span>
+  1324→              <span className="text-center">Status</span>
+  1325→              <span className="text-center">Attempts</span>
+  1326→              <span className="text-center">Action</span>
+  1327→            </div>
+  1328→            {verDisplay.map((item) => {
+  1329→              const doc = verificationDocs.find((d) => d.type === item.type);
+  1330→              const status = getStatusDisplay(doc?.status || 'not_started');
+  1331→              const StatusIcon = status.icon;
+  1332→              const attemptsUsed = doc?.attempts?.length || 0;
+  1333→              const isLocked = doc?.status === 'max_attempts_reached';
+  1334→              const isApproved = doc?.status === 'approved';
+  1335→              const isActive = doc?.status === 'submitted' || doc?.status === 'under_review';
+  1336→              const needsUpload = doc?.status === 'not_started' || doc?.status === 'rejected';
+  1337→
+  1338→              return (
+  1339→                <div
+  1340→                  key={item.title}
+  1341→                  role="button"
+  1342→                  tabIndex={0}
+  1343→                  className={`rounded-xl border p-4 flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center gap-3 transition-all ${
+  1344→                    isApproved
+  1345→                      ? 'border-emerald-100 bg-emerald-50/30 hover:border-emerald-200 hover:shadow-sm cursor-pointer'
+  1346→                      : isActive
+  1347→                        ? 'border-blue-100 bg-blue-50/30 hover:border-blue-200 hover:shadow-sm cursor-pointer'
+  1348→                        : isLocked
+  1349→                          ? 'border-red-100 bg-red-50/20 opacity-70'
+  1350→                          : 'border-gray-100 bg-white hover:border-blue-200 hover:shadow-sm cursor-pointer'
+  1351→                  }`}
+  1352→                  onClick={handleOpenVerification}
+  1353→                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenVerification(); } }}
+  1354→                >
+  1355→                  {/* Column 1: Document name + icon */}
+  1356→                  <div className="flex items-center gap-3">
+  1357→                    <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${status.bg}`}>
+  1358→                      <item.icon className={`size-5 ${status.color}`} />
+  1359→                    </div>
+  1360→                    <div>
+  1361→                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
+  1362→                      <p className="text-[11px] text-gray-400 sm:hidden">
+  1363→                        <StatusIcon className={`size-3 inline mr-0.5 ${status.color}`} />
+  1364→                        {status.label}
+  1365→                      </p>
+  1366→                    </div>
+  1367→                  </div>
+  1368→
+  1369→                  {/* Column 2: Status badge */}
+  1370→                  <Badge
+  1371→                    variant="outline"
+  1372→                    className={`hidden sm:inline-flex text-[11px] px-2.5 py-0.5 ${
+  1373→                      isApproved
+  1374→                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1375→                        : isActive
+  1376→                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+  1377→                          : isLocked
+  1378→                            ? 'bg-red-50 text-red-600 border-red-200'
+  1379→                            : 'bg-amber-50 text-amber-700 border-amber-200'
+  1380→                    }`}
+  1381→                  >
+  1382→                    <StatusIcon className="size-3 mr-1" />
+  1383→                    {status.label}
+  1384→                  </Badge>
+  1385→
+  1386→                  {/* Column 3: Attempts dots */}
+  1387→                  <div className="hidden sm:flex items-center justify-center gap-1">
+  1388→                    {Array.from({ length: 3 }).map((_, i) => (
+  1389→                      <div
+  1390→                        key={i}
+  1391→                        className={`size-2.5 rounded-full border ${
+  1392→                          i < attemptsUsed
+  1393→                            ? doc?.attempts[i]?.status === 'rejected'
+  1394→                              ? 'bg-red-400 border-red-300'
+  1395→                              : doc?.attempts[i]?.status === 'approved'
+  1396→                                ? 'bg-emerald-400 border-emerald-300'
+  1397→                                : 'bg-blue-400 border-blue-300'
+  1398→                            : 'bg-white border-gray-200'
+  1399→                        }`}
+  1400→                      />
+  1401→                    ))}
+  1402→                    <span className={`text-[10px] ml-1 font-medium ${
+  1403→                      isLocked ? 'text-red-500' : 'text-gray-400'
+  1404→                    }`}>
+  1405→                      {attemptsUsed}/3
+  1406→                    </span>
+  1407→                  </div>
+  1408→
+  1409→                  {/* Column 4: Action button */}
+  1410→                  <div className="hidden sm:flex justify-center">
+  1411→                    {isApproved ? (
+  1412→                      <span className="text-[11px] text-emerald-600 font-medium">✓ Done</span>
+  1413→                    ) : isLocked ? (
+  1414→                      <span className="text-[11px] text-red-500 font-medium">🔒 Locked</span>
+  1415→                    ) : isActive ? (
+  1416→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
+  1417→                        <Loader2 className="size-3 animate-spin" />
+  1418→                        In Review
+  1419→                      </span>
+  1420→                    ) : (
+  1421→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
+  1422→                        Upload
+  1423→                        <ArrowUpRight className="size-3" />
+  1424→                      </span>
+  1425→                    )}
+  1426→                  </div>
+  1427→                </div>
+  1428→              );
+  1429→            })}
+  1430→          </div>
+  1431→
+  1432→          {/* Action Buttons — always visible so users can view their verification details */}
+  1433→          <div className="mt-5 flex flex-col sm:flex-row justify-center gap-2">
+  1434→            <Button
+  1435→              onClick={handleOpenVerification}
+  1436→              className={`gap-2 ${hasUnverified ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+  1437→            >
+  1438→              <Shield className="size-4" />
+  1439→              {allVerified ? 'View Verifications' : hasUnverified ? 'Manage Verifications' : 'Track Submission Status'}
+  1440→            </Button>
+  1441→            {(activeCount > 0 || lockedCount > 0) && (
+  1442→              <Button variant="outline" className="gap-2" onClick={handleOpenVerification}>
+  1443→                <Clock className="size-4" />
+  1444→                Track Submission Status
+  1445→              </Button>
+  1446→            )}
+  1447→          </div>
+  1448→
+  1449→          {/* Tracking info for submitted docs */}
+  1450→          {activeCount > 0 && (
+  1451→            <div className="mt-4 rounded-xl bg-indigo-50 border border-indigo-100 p-3.5">
+  1452→              <div className="flex items-start gap-2.5">
+  1453→                <Send className="size-4 text-indigo-500 mt-0.5 shrink-0" />
+  1454→                <div>
+  1455→                  <p className="text-xs font-medium text-indigo-800">
+  1456→                    {activeCount} document{activeCount > 1 ? 's' : ''} submitted to Nurturee
+  1457→                  </p>
+  1458→                  <p className="text-xs text-indigo-600 mt-0.5">
+  1459→                    Our verification team will review within 24-48 hours. If rejected, you may re-upload (up to 3 attempts total per verification).
+  1460→                  </p>
+  1461→                </div>
+  1462→              </div>
+  1463→            </div>
+  1464→          )}
+  1465→
+  1466→          {/* Warning for locked verifications */}
+  1467→          {lockedCount > 0 && (
+  1468→            <div className="mt-3 rounded-xl bg-red-50 border border-red-100 p-3.5">
+  1469→              <div className="flex items-start gap-2.5">
+  1470→                <Ban className="size-4 text-red-500 mt-0.5 shrink-0" />
+  1471→                <div>
+  1472→                  <p className="text-xs font-medium text-red-800">
+  1473→                    {lockedCount} verification{lockedCount > 1 ? 's' : ''} permanently locked
+  1474→                  </p>
+  1475→                  <p className="text-xs text-red-600 mt-0.5">
+  1476→                    Maximum upload attempts reached. Please contact Nurturee support at{' '}
+  1477→                    <span className="font-medium">support@nurturee.com</span> for assistance.
+  1478→                  </p>
+  1479→                </div>
+  1480→              </div>
+  1481→            </div>
+  1482→          )}
+  1483→        </CardContent>
+  1484→      </Card>
+  1485→
+  1486→      {/* Section 6: About Card */}
+  1487→      <Card>
+  1488→        <CardHeader className="pb-4">
+  1489→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1490→            <Award className="size-5 text-gray-400" />
+  1491→            About
+  1492→          </CardTitle>
+  1493→        </CardHeader>
+  1494→        <Separator />
+  1495→        <CardContent className="p-6">
+  1496→          {!isEditing ? (
+  1497→            <p className="text-sm text-gray-700 leading-relaxed">{profile.bio}</p>
+  1498→          ) : (
+  1499→            <div className="space-y-2">
+  1500→              <Label htmlFor="edit-bio" className="text-xs font-medium text-gray-500">Bio</Label>
+  1501→              <Textarea
+  1502→                id="edit-bio"
+  1503→                value={profile.bio}
+  1504→                onChange={(e) => setProfile((p) => ({ ...p, bio: e.target.value }))}
+  1505→                rows={4}
+  1506→                placeholder="Tell us about yourself and your care partner experience..."
+  1507→              />
+  1508→            </div>
+  1509→          )}
+  1510→        </CardContent>
+  1511→      </Card>
+  1512→
+  1513→      {/* Section 7: SOS Emergency Button */}
+  1514→      <div className="rounded-2xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-5">
+  1515→        <div className="flex items-start gap-4">
+  1516→          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-600 shadow-lg shadow-red-600/30">
+  1517→            <Siren className="size-6 text-white" />
+  1518→          </div>
+  1519→          <div className="flex-1 min-w-0">
+  1520→            <h3 className="text-base font-bold text-red-800 flex items-center gap-2">
+  1521→              SOS — Emergency Alert
+  1522→            </h3>
+  1523→            <p className="text-xs text-red-600 font-medium mt-0.5 leading-relaxed">
+  1524→              FOR EMERGENCY SITUATIONS ONLY
+  1525→            </p>
+  1526→            <p className="text-xs text-red-700/70 mt-1.5 leading-relaxed">
+  1527→              Press this button to immediately alert the Nurturee emergency response team and notify the patient's emergency contact. Use only when the patient's health or safety is at serious, immediate risk.
+  1528→            </p>
+  1529→            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+  1530→              <Button
+  1531→                size="sm"
+  1532→                className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20 gap-2"
+  1533→                onClick={() => setSosOpen(true)}
+  1534→              >
+  1535→                <Siren className="size-4" />
+  1536→                Trigger SOS Alert
+  1537→              </Button>
+  1538→              <Button
+  1539→                variant="outline"
+  1540→                size="sm"
+  1541→                className="border-red-200 text-red-700 hover:bg-red-50 gap-2"
+  1542→                onClick={() => {
+  1543→                  window.open('tel:112', '_self')
+  1544→                }}
+  1545→              >
+  1546→                <PhoneCall className="size-4" />
+  1547→                Call Emergency 112
+  1548→              </Button>
+  1549→            </div>
+  1550→          </div>
+  1551→        </div>
+  1552→      </div>
+  1553→      {/* SOS Emergency Dialog */}
+  1554→      <SOSEmergencyDialog
+  1555→        open={sosOpen}
+  1556→        onClose={() => setSosOpen(false)}
+  1557→      />
+  1558→    </div>
+  1559→  );
+  1560→}
+  1561→

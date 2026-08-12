@@ -1,0 +1,1134 @@
+     1→'use client';
+     2→
+     3→import { useState } from 'react';
+     4→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Label } from '@/components/ui/label';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Switch } from '@/components/ui/switch';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import {
+    13→  UserCircle,
+    14→  Star,
+    15→  MapPin,
+    16→  Phone,
+    17→  Mail,
+    18→  Shield,
+    19→  CheckCircle,
+    20→  XCircle,
+    21→  Clock,
+    22→  Edit3,
+    23→  Save,
+    24→  X,
+    25→  Camera,
+    26→  Award,
+    27→  FileCheck,
+    28→  Heart,
+    29→  Globe,
+    30→  Briefcase,
+    31→  Send,
+    32→  AlertCircle,
+    33→  Loader2,
+    34→  ArrowUpRight,
+    35→  Ban,
+    36→  Stethoscope,
+    37→  GraduationCap,
+    38→  Sparkles,
+    39→  TrendingUp,
+    40→  BadgeCheck,
+    41→  IndianRupee,
+    42→  Activity,
+    43→  Pencil,
+    44→  Plus,
+    45→  Minus,
+    46→  ChevronDown,
+    47→} from 'lucide-react';
+    48→import { mockCaregiver } from '@/lib/caregiver-data';
+    49→
+    50→const VERIFICATION_STORAGE_KEY = 'nurturee_caregiver_verification';
+    51→
+    52→// ─── Skills Catalog ─────────────────────────────────────────────────────────
+    53→// All available skills a caregiver can choose from
+    54→const SKILLS_CATALOG = [
+    55→  { name: 'Dementia & Alzheimer Care', category: 'Specialized' },
+    56→  { name: 'Geriatric Nursing', category: 'Medical' },
+    57→  { name: 'Medication Management', category: 'Medical' },
+    58→  { name: 'Vital Signs Monitoring', category: 'Medical' },
+    59→  { name: 'Mobility & Physiotherapy Assistance', category: 'Physical' },
+    60→  { name: 'Palliative & End-of-Life Care', category: 'Specialized' },
+    61→  { name: 'Nutrition & Diet Planning', category: 'Wellness' },
+    62→  { name: 'CPR & First Aid', category: 'Medical' },
+    63→  { name: 'Patient Hygiene & Grooming', category: 'Personal Care' },
+    64→  { name: 'Wound Care Management', category: 'Medical' },
+    65→  { name: 'Diabetes Management', category: 'Medical' },
+    66→  { name: 'Oxygen & Respiratory Care', category: 'Medical' },
+    67→  { name: 'Emotional & Mental Health Support', category: 'Wellness' },
+    68→  { name: 'Child Development & Activities', category: 'Child Care' },
+    69→  { name: 'Newborn & Infant Care', category: 'Child Care' },
+    70→  { name: 'Feeding & Lactation Support', category: 'Child Care' },
+    71→  { name: 'Speech & Language Therapy Assistance', category: 'Therapy' },
+    72→  { name: 'Behavioral Management', category: 'Specialized' },
+    73→  { name: 'Home Safety Assessment', category: 'Safety' },
+    74→  { name: 'Emergency Response', category: 'Safety' },
+    75→] as const;
+    76→
+    77→type SkillLevel = 'expert' | 'advanced' | 'intermediate' | 'beginner';
+    78→
+    79→interface SelectedSkill {
+    80→  name: string;
+    81→  level: SkillLevel;
+    82→  years: number;
+    83→}
+    84→
+    85→const LEVEL_CONFIG: Record<SkillLevel, { color: string; bg: string; border: string; label: string }> = {
+    86→  expert: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Expert' },
+    87→  advanced: { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', label: 'Advanced' },
+    88→  intermediate: { color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-200', label: 'Intermediate' },
+    89→  beginner: { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Beginner' },
+    90→};
+    91→
+    92→// ─── Services Catalog ────────────────────────────────────────────────────────
+    93→const SERVICES_CATALOG = [
+    94→  { name: 'Elderly Day Care', description: 'Full-day in-home care with meals, activities, and companionship', category: 'Elder Care' },
+    95→  { name: 'Live-in Care', description: '24/7 dedicated care for bedridden or critically ill patients', category: 'Elder Care' },
+    96→  { name: 'Hospital Attendant', description: 'Professional hospital sitter for post-surgery and recovery periods', category: 'Medical' },
+    97→  { name: 'Dementia Companion', description: 'Specialized cognitive engagement, memory activities, and safety supervision', category: 'Specialized' },
+    98→  { name: 'Post-Surgery Recovery', description: 'Wound care, medication management, and rehabilitation support at home', category: 'Medical' },
+    99→  { name: 'Physiotherapy Assistance', description: 'Assist with prescribed physio exercises and mobility training', category: 'Therapy' },
+   100→  { name: 'Newborn & Infant Care', description: 'Round-the-clock infant feeding, bathing, sleep routine, and mother support', category: 'Child Care' },
+   101→  { name: 'Child Day Care', description: 'Supervised daytime childcare with learning activities and meals', category: 'Child Care' },
+   102→  { name: 'Special Needs Companion', description: 'Dedicated support for children with special needs and developmental activities', category: 'Specialized' },
+   103→  { name: 'Elderly Companion', description: 'Part-time companionship, walking assistance, and social engagement for seniors', category: 'Elder Care' },
+   104→  { name: 'Palliative Care Support', description: 'Compassionate end-of-life care with pain management and family emotional support', category: 'Medical' },
+   105→  { name: 'Medication Reminder Service', description: 'Timely medication administration and prescription management at home', category: 'Medical' },
+   106→  { name: 'Wound Care & Dressing', description: 'Professional wound cleaning, dressing change, and infection prevention', category: 'Medical' },
+   107→  { name: 'Bathing & Hygiene Assistance', description: 'Personal hygiene, grooming, and bathroom safety assistance for patients', category: 'Personal Care' },
+   108→  { name: 'Meal Preparation & Diet', description: 'Nutritious meal planning, cooking, and feeding assistance as per dietary needs', category: 'Personal Care' },
+   109→  { name: 'Doctor Appointment Escort', description: 'Accompany patient to hospital visits, manage records and follow-up instructions', category: 'Support' },
+   110→  { name: 'Lab Sample Collection', description: 'Home blood draw, sample collection, and delivery to diagnostic labs', category: 'Medical' },
+   111→] as const;
+   112→
+   113→interface SelectedService {
+   114→  name: string;
+   115→  description: string;
+   116→}
+   117→
+   118→type VerificationType = 'aadhaar' | 'police' | 'medical' | 'video';
+   119→type VerificationStatus = 'not_started' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'max_attempts_reached';
+   120→
+   121→interface VerificationDoc {
+   122→  id: string;
+   123→  type: VerificationType;
+   124→  status: VerificationStatus;
+   125→  attempts: Array<{
+   126→    attemptNumber: number;
+   127→    submittedAt: string;
+   128→    documents: Array<{ id: string; name: string; size: number; type: string }>;
+   129→    formFields: Record<string, string>;
+   130→    status: VerificationStatus;
+   131→    reviewedAt?: string;
+   132→  }>;
+   133→  currentDraft: { documents: Array<{ id: string; name: string; size: number; type: string }>; formFields: Record<string, string> };
+   134→}
+   135→
+   136→interface ProfileViewProps {
+   137→  onNavigate?: (view: string) => void;
+   138→}
+   139→
+   140→export default function ProfileView({ onNavigate }: ProfileViewProps) {
+   141→  const [isEditing, setIsEditing] = useState(false);
+   142→  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+   143→  const [editingSkills, setEditingSkills] = useState(false);
+   144→  const [selectedSkills, setSelectedSkills] = useState<SelectedSkill[]>(
+   145→    mockCaregiver.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   146→  );
+   147→  const [editingServices, setEditingServices] = useState(false);
+   148→  const [selectedServices, setSelectedServices] = useState<SelectedService[]>(
+   149→    mockCaregiver.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   150→  );
+   151→  const [profile, setProfile] = useState({
+   152→    name: mockCaregiver.name,
+   153→    email: mockCaregiver.email,
+   154→    phone: mockCaregiver.phone,
+   155→    experience: mockCaregiver.experience,
+   156→    qualifications: mockCaregiver.qualifications,
+   157→    languages: mockCaregiver.languages.join(', '),
+   158→    bio: mockCaregiver.bio,
+   159→  });
+   160→  const [availability, setAvailability] = useState(
+   161→    mockCaregiver.availability.map((a) => ({ ...a }))
+   162→  );
+   163→  const [isAvailable, setIsAvailable] = useState(mockCaregiver.isAvailable);
+   164→
+   165→  // Read verification docs from localStorage — must match VerificationPage's storage format
+   166→  const STORAGE_VERSION_KEY = 'nurturee_caregiver_verification_v2';
+   167→  const CURRENT_STORAGE_VERSION = 4;
+   168→
+   169→  const getStoredVerificationDocs = (): VerificationDoc[] => {
+   170→    try {
+   171→      // Version check — if storage format is outdated, clear and start fresh
+   172→      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+   173→      if (storedVersion !== String(CURRENT_STORAGE_VERSION)) {
+   174→        localStorage.removeItem(VERIFICATION_STORAGE_KEY);
+   175→        localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_STORAGE_VERSION));
+   176→        // Fall through to fresh defaults
+   177→      } else {
+   178→        const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
+   179→        if (stored) {
+   180→          const parsed = JSON.parse(stored);
+   181→          if (Array.isArray(parsed) && parsed.length === 4) {
+   182→            return parsed;
+   183→          }
+   184→        }
+   185→      }
+   186→    } catch {
+   187→      // fall through
+   188→    }
+   189→    // Fresh defaults — all NOT started (no fake approved data)
+   190→    return [
+   191→      { id: 'v-aadhaar', type: 'aadhaar', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   192→      { id: 'v-police', type: 'police', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   193→      { id: 'v-medical', type: 'medical', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   194→      { id: 'v-video', type: 'video', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   195→    ];
+   196→  };
+   197→
+   198→  const verificationDocs = getStoredVerificationDocs();
+   199→
+   200→  const initials = profile.name
+   201→    .split(' ')
+   202→    .map((n) => n[0])
+   203→    .join('')
+   204→    .toUpperCase();
+   205→
+   206→  const specialtyLabels: Record<string, string> = {
+   207→    elder_care: 'Elder Care',
+   208→    child_care: 'Child Care',
+   209→    office_care: 'Office Care',
+   210→    day_care: 'Day Care',
+   211→    live_in_care: 'Live-in Care',
+   212→    hourly_care: 'Hourly Care',
+   213→  };
+   214→  const specialtyLabel = specialtyLabels[mockCaregiver.specialty] || 'Care';
+   215→
+   216→  // Map verification docs to display items for the Verification Status card
+   217→  const verDisplay = [
+   218→    { title: 'Aadhaar Verification', type: 'aadhaar' as VerificationType, icon: Shield },
+   219→    { title: 'Police Verification', type: 'police' as VerificationType, icon: FileCheck },
+   220→    { title: 'Medical Fitness', type: 'medical' as VerificationType, icon: Heart },
+   221→    { title: 'Video Verification', type: 'video' as VerificationType, icon: UserCircle },
+   222→  ];
+   223→
+   224→  const allVerified = verificationDocs.every((d) => d.status === 'approved');
+   225→  const hasUnverified = verificationDocs.some((d) => d.status !== 'approved');
+   226→  const activeCount = verificationDocs.filter((d) => d.status === 'submitted' || d.status === 'under_review').length;
+   227→  const lockedCount = verificationDocs.filter((d) => d.status === 'max_attempts_reached').length;
+   228→
+   229→  const getStatusDisplay = (status: VerificationStatus) => {
+   230→    switch (status) {
+   231→      case 'approved':
+   232→        return { label: 'Verified', color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle };
+   233→      case 'submitted':
+   234→        return { label: 'Submitted', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Send };
+   235→      case 'under_review':
+   236→        return { label: 'Under Review', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock };
+   237→      case 'rejected':
+   238→        return { label: 'Rejected', color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200', icon: AlertCircle };
+   239→      case 'max_attempts_reached':
+   240→        return { label: 'Locked', color: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-300', icon: Ban };
+   241→      default:
+   242→        return { label: 'Not Verified', color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', icon: XCircle };
+   243→    }
+   244→  };
+   245→
+   246→  const handleSave = () => setIsEditing(false);
+   247→
+   248→  const handleCancel = () => {
+   249→    setProfile({
+   250→      name: mockCaregiver.name,
+   251→      email: mockCaregiver.email,
+   252→      phone: mockCaregiver.phone,
+   253→      experience: mockCaregiver.experience,
+   254→      qualifications: mockCaregiver.qualifications,
+   255→      languages: mockCaregiver.languages.join(', '),
+   256→      bio: mockCaregiver.bio,
+   257→    });
+   258→    setIsEditing(false);
+   259→  };
+   260→
+   261→  // ─── Skills Management ──────────────────────────────────────────────────
+   262→
+   263→  const isSkillSelected = (name: string) => selectedSkills.some((s) => s.name === name);
+   264→
+   265→  const toggleSkill = (name: string) => {
+   266→    setSelectedSkills((prev) => {
+   267→      if (prev.some((s) => s.name === name)) {
+   268→        return prev.filter((s) => s.name !== name);
+   269→      }
+   270→      return [...prev, { name, level: 'intermediate' as SkillLevel, years: 1 }];
+   271→    });
+   272→  };
+   273→
+   274→  const updateSkillLevel = (name: string, level: SkillLevel) => {
+   275→    setSelectedSkills((prev) =>
+   276→      prev.map((s) => (s.name === name ? { ...s, level } : s))
+   277→    );
+   278→  };
+   279→
+   280→  const updateSkillYears = (name: string, years: number) => {
+   281→    setSelectedSkills((prev) =>
+   282→      prev.map((s) => (s.name === name ? { ...s, years: Math.max(0, Math.min(50, years)) } : s))
+   283→    );
+   284→  };
+   285→
+   286→  const handleSaveSkills = () => {
+   287→    // In production this would save to backend
+   288→    setEditingSkills(false);
+   289→  };
+   290→
+   291→  const handleCancelSkills = () => {
+   292→    setSelectedSkills(
+   293→      mockCaregiver.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   294→    );
+   295→    setEditingSkills(false);
+   296→  };
+   297→
+   298→  // Group catalog skills by category (excluding already selected)
+   299→  const getCatalogByCategory = () => {
+   300→    const unselected = SKILLS_CATALOG.filter((s) => !isSkillSelected(s.name));
+   301→    const grouped: Record<string, typeof SKILLS_CATALOG[number][]> = {};
+   302→    for (const skill of unselected) {
+   303→      const cat = skill.category;
+   304→      if (!grouped[cat]) grouped[cat] = [];
+   305→      grouped[cat].push(skill);
+   306→    }
+   307→    return grouped;
+   308→  };
+   309→
+   310→  // ─── Services Management ─────────────────────────────────────────────────
+   311→
+   312→  const isServiceSelected = (name: string) => selectedServices.some((s) => s.name === name);
+   313→
+   314→  const toggleService = (name: string, description: string) => {
+   315→    setSelectedServices((prev) => {
+   316→      if (prev.some((s) => s.name === name)) {
+   317→        return prev.filter((s) => s.name !== name);
+   318→      }
+   319→      return [...prev, { name, description }];
+   320→    });
+   321→  };
+   322→
+   323→  const handleSaveServices = () => {
+   324→    setEditingServices(false);
+   325→  };
+   326→
+   327→  const handleCancelServices = () => {
+   328→    setSelectedServices(
+   329→      mockCaregiver.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   330→    );
+   331→    setEditingServices(false);
+   332→  };
+   333→
+   334→  const getServicesCatalogByCategory = () => {
+   335→    const unselected = SERVICES_CATALOG.filter((s) => !isServiceSelected(s.name));
+   336→    const grouped: Record<string, typeof SERVICES_CATALOG[number][]> = {};
+   337→    for (const service of unselected) {
+   338→      const cat = service.category;
+   339→      if (!grouped[cat]) grouped[cat] = [];
+   340→      grouped[cat].push(service);
+   341→    }
+   342→    return grouped;
+   343→  };
+   344→
+   345→  const toggleDayAvailability = (index: number) => {
+   346→    setAvailability((prev) =>
+   347→      prev.map((day, i) => (i === index ? { ...day, isAvailable: !day.isAvailable } : day))
+   348→    );
+   349→  };
+   350→
+   351→  const handleOpenVerification = () => {
+   352→    if (onNavigate) {
+   353→      onNavigate('verification');
+   354→    }
+   355→  };
+   356→
+   357→  return (
+   358→    <div className="space-y-6 max-w-4xl mx-auto">
+   359→      {/* Section 1: Profile Header Card */}
+   360→      <Card>
+   361→        <CardContent className="p-6">
+   362→          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+   363→            <div className="flex items-center gap-4">
+   364→              <div className="relative">
+   365→                <div className="size-20 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-2xl font-bold flex items-center justify-center overflow-hidden">
+   366→                  {avatarUrl ? (
+   367→                    <img src={avatarUrl} alt="Profile" className="size-full object-cover" />
+   368→                  ) : (
+   369→                    initials
+   370→                  )}
+   371→                </div>
+   372→                {isEditing && (
+   373→                  <label className="absolute -bottom-1 -right-1 size-7 bg-white rounded-full border border-gray-200 flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+   374→                    <Camera className="size-3.5 text-gray-500" />
+   375→                    <input
+   376→                      type="file"
+   377→                      accept="image/*"
+   378→                      className="sr-only"
+   379→                      onChange={(e) => {
+   380→                        const file = e.target.files?.[0];
+   381→                        if (file) {
+   382→                          const reader = new FileReader();
+   383→                          reader.onload = (ev) => {
+   384→                            setAvatarUrl(ev.target?.result as string);
+   385→                          };
+   386→                          reader.readAsDataURL(file);
+   387→                        }
+   388→                      }}
+   389→                    />
+   390→                  </label>
+   391→                )}
+   392→              </div>
+   393→              <div className="space-y-1">
+   394→                <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
+   395→                <p className="text-xs font-mono text-gray-400">{mockCaregiver.caregiverId}</p>
+   396→                <div className="flex flex-wrap items-center gap-2 pt-1">
+   397→                  <Badge className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 hover:bg-blue-100 border-0">
+   398→                    {specialtyLabel}
+   399→                  </Badge>
+   400→                  <div className="flex items-center gap-1">
+   401→                    <Star className="size-3.5 text-amber-400 fill-amber-400" />
+   402→                    <span className="text-sm font-medium text-gray-700">{mockCaregiver.rating}</span>
+   403→                    <span className="text-xs text-gray-500">({mockCaregiver.totalAssignments} assignments)</span>
+   404→                  </div>
+   405→                </div>
+   406→                <div className="flex items-center gap-1.5 text-sm text-gray-500 pt-0.5">
+   407→                  <MapPin className="size-3.5" />
+   408→                  <span>{mockCaregiver.area}</span>
+   409→                </div>
+   410→              </div>
+   411→            </div>
+   412→            {!isEditing ? (
+   413→              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-2">
+   414→                <Edit3 className="size-4" />
+   415→                Edit Profile
+   416→              </Button>
+   417→            ) : (
+   418→              <div className="flex gap-2">
+   419→                <Button size="sm" onClick={handleSave} className="gap-2">
+   420→                  <Save className="size-4" />
+   421→                  Save
+   422→                </Button>
+   423→                <Button variant="outline" size="sm" onClick={handleCancel} className="gap-2">
+   424→                  <X className="size-4" />
+   425→                  Cancel
+   426→                </Button>
+   427→              </div>
+   428→            )}
+   429→          </div>
+   430→        </CardContent>
+   431→      </Card>
+   432→
+   433→      {/* Section 2: Personal Information Card */}
+   434→      <Card>
+   435→        <CardHeader className="pb-4">
+   436→          <div className="flex items-center justify-between">
+   437→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   438→              <Briefcase className="size-5 text-gray-400" />
+   439→              Personal Information
+   440→            </CardTitle>
+   441→            {!isEditing && (
+   442→              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)} className="gap-1.5 text-gray-500 hover:text-gray-700">
+   443→                <Edit3 className="size-3.5" />
+   444→                Edit
+   445→              </Button>
+   446→            )}
+   447→          </div>
+   448→        </CardHeader>
+   449→        <Separator />
+   450→        <CardContent className="p-6">
+   451→          {!isEditing ? (
+   452→            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   453→              {[
+   454→                { label: 'Full Name', value: profile.name },
+   455→                { label: 'Email', value: profile.email, icon: Mail },
+   456→                { label: 'Phone', value: profile.phone, icon: Phone },
+   457→                { label: 'Experience', value: `${profile.experience} years` },
+   458→                { label: 'Qualifications', value: profile.qualifications },
+   459→                { label: 'Languages', value: profile.languages, icon: Globe },
+   460→              ].map((item) => (
+   461→                <div key={item.label} className="space-y-1">
+   462→                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{item.label}</p>
+   463→                  <div className="flex items-center gap-1.5">
+   464→                    {'icon' in item && item.icon && <item.icon className="size-3.5 text-gray-400" />}
+   465→                    <p className="text-sm font-medium text-gray-900">{item.value}</p>
+   466→                  </div>
+   467→                </div>
+   468→              ))}
+   469→            </div>
+   470→          ) : (
+   471→            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+   472→              {[
+   473→                { id: 'edit-name', label: 'Full Name', value: profile.name, key: 'name' as const, type: 'text' },
+   474→                { id: 'edit-email', label: 'Email', value: profile.email, key: 'email' as const, type: 'email' },
+   475→                { id: 'edit-phone', label: 'Phone', value: profile.phone, key: 'phone' as const, type: 'tel' },
+   476→                { id: 'edit-experience', label: 'Experience (years)', value: profile.experience, key: 'experience' as const, type: 'number' },
+   477→              ].map((field) => (
+   478→                <div key={field.id} className="space-y-2">
+   479→                  <Label htmlFor={field.id} className="text-xs font-medium text-gray-500">{field.label}</Label>
+   480→                  <Input
+   481→                    id={field.id}
+   482→                    type={field.type}
+   483→                    value={field.value}
+   484→                    onChange={(e) =>
+   485→                      setProfile((p) => ({
+   486→                        ...p,
+   487→                        [field.key]: field.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value,
+   488→                      }))
+   489→                    }
+   490→                  />
+   491→                </div>
+   492→              ))}
+   493→              <div className="space-y-2 md:col-span-2">
+   494→                <Label htmlFor="edit-qualifications" className="text-xs font-medium text-gray-500">Qualifications</Label>
+   495→                <Input
+   496→                  id="edit-qualifications"
+   497→                  value={profile.qualifications}
+   498→                  onChange={(e) => setProfile((p) => ({ ...p, qualifications: e.target.value }))}
+   499→                />
+   500→              </div>
+   501→              <div className="space-y-2 md:col-span-2">
+   502→                <Label htmlFor="edit-languages" className="text-xs font-medium text-gray-500">Languages (comma-separated)</Label>
+   503→                <Input
+   504→                  id="edit-languages"
+   505→                  value={profile.languages}
+   506→                  onChange={(e) => setProfile((p) => ({ ...p, languages: e.target.value }))}
+   507→                  placeholder="English, Hindi, Punjabi"
+   508→                />
+   509→              </div>
+   510→            </div>
+   511→          )}
+   512→        </CardContent>
+   513→      </Card>
+   514→
+   515→      {/* Section 3: Specialist Profile Card */}
+   516→      {mockCaregiver.specialistProfile && (
+   517→        <Card>
+   518→          <CardHeader className="pb-4">
+   519→            <div className="flex items-center justify-between">
+   520→              <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   521→                <Stethoscope className="size-5 text-gray-400" />
+   522→                {mockCaregiver.specialistProfile.title}
+   523→              </CardTitle>
+   524→              <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-full px-3 py-1 hover:from-blue-100 hover:to-indigo-100 border border-blue-200/60">
+   525→                <Sparkles className="size-3 mr-1" />
+   526→                {specialtyLabel}
+   527→              </Badge>
+   528→            </div>
+   529→          </CardHeader>
+   530→          <Separator />
+   531→          <CardContent className="p-6 space-y-6">
+   532→            {/* Tagline */}
+   533→            <p className="text-sm text-gray-600 leading-relaxed">{mockCaregiver.specialistProfile.tagline}</p>
+   534→
+   535→            {/* Stats Grid */}
+   536→            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+   537→              {[
+   538→                { label: 'Shifts Done', value: mockCaregiver.specialistProfile.stats.completedShifts.toLocaleString('en-IN'), icon: Activity, color: 'text-blue-600', bg: 'bg-blue-50' },
+   539→                { label: 'Active', value: mockCaregiver.specialistProfile.stats.ongoingAssignments, icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   540→                { label: 'Repeat Clients', value: mockCaregiver.specialistProfile.stats.repeatClients, icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50' },
+   541→                { label: 'Rating', value: mockCaregiver.specialistProfile.stats.averageRating, icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
+   542→                { label: 'Reviews', value: mockCaregiver.specialistProfile.stats.totalReviews, icon: Award, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+   543→                { label: 'Years', value: mockCaregiver.specialistProfile.stats.yearsActive, icon: GraduationCap, color: 'text-teal-600', bg: 'bg-teal-50' },
+   544→              ].map((stat) => {
+   545→                const StatIcon = stat.icon;
+   546→                return (
+   547→                  <div key={stat.label} className="text-center rounded-xl border border-gray-100 bg-white p-3">
+   548→                    <div className={`size-8 rounded-lg ${stat.bg} flex items-center justify-center mx-auto mb-1.5`}>
+   549→                      <StatIcon className={`size-4 ${stat.color}`} />
+   550→                    </div>
+   551→                    <p className="text-base font-bold text-gray-900">{stat.value}</p>
+   552→                    <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{stat.label}</p>
+   553→                  </div>
+   554→                );
+   555→              })}
+   556→            </div>
+   557→
+   558→            {/* Skills */}
+   559→            <div>
+   560→              <div className="flex items-center justify-between mb-3">
+   561→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   562→                  <Sparkles className="size-4 text-gray-400" />
+   563→                  Core Skills & Expertise
+   564→                  {selectedSkills.length > 0 && (
+   565→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   566→                      {selectedSkills.length} selected
+   567→                    </Badge>
+   568→                  )}
+   569→                </h3>
+   570→                {!editingSkills ? (
+   571→                  <Button
+   572→                    variant="ghost"
+   573→                    size="sm"
+   574→                    onClick={() => setEditingSkills(true)}
+   575→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   576→                  >
+   577→                    <Pencil className="size-3" />
+   578→                    <span className="text-xs">Edit</span>
+   579→                  </Button>
+   580→                ) : (
+   581→                  <div className="flex items-center gap-1">
+   582→                    <Button
+   583→                      variant="ghost"
+   584→                      size="sm"
+   585→                      onClick={handleCancelSkills}
+   586→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   587→                    >
+   588→                      <span className="text-xs">Cancel</span>
+   589→                    </Button>
+   590→                    <Button
+   591→                      size="sm"
+   592→                      onClick={handleSaveSkills}
+   593→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   594→                    >
+   595→                      <Save className="size-3" />
+   596→                      Save
+   597→                    </Button>
+   598→                  </div>
+   599→                )}
+   600→              </div>
+   601→
+   602→              {!editingSkills ? (
+   603→                /* ─── View Mode: Skill badges ─── */
+   604→                <div className="flex flex-wrap gap-2">
+   605→                  {selectedSkills.length === 0 ? (
+   606→                    <p className="text-xs text-gray-400 italic">No skills added yet. Tap Edit to add your skills.</p>
+   607→                  ) : (
+   608→                    selectedSkills.map((skill) => {
+   609→                      const lvl = LEVEL_CONFIG[skill.level];
+   610→                      return (
+   611→                        <div
+   612→                          key={skill.name}
+   613→                          className={`inline-flex items-center gap-1.5 rounded-lg border ${lvl.border} ${lvl.bg} px-3 py-1.5 cursor-default`}
+   614→                        >
+   615→                          <BadgeCheck className={`size-3.5 ${lvl.color}`} />
+   616→                          <span className={`text-xs font-medium ${lvl.color}`}>{skill.name}</span>
+   617→                          <span className="text-[10px] text-gray-400 font-medium">{skill.years}y</span>
+   618→                        </div>
+   619→                      );
+   620→                    })
+   621→                  )}
+   622→                </div>
+   623→              ) : (
+   624→                /* ─── Edit Mode: Selected skills with level/years + catalog ─── */
+   625→                <div className="space-y-4">
+   626→                  {/* Already selected skills — editable cards */}
+   627→                  {selectedSkills.length > 0 && (
+   628→                    <div className="space-y-2">
+   629→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Skills</p>
+   630→                      {selectedSkills.map((skill) => {
+   631→                        const lvl = LEVEL_CONFIG[skill.level];
+   632→                        return (
+   633→                          <div
+   634→                            key={skill.name}
+   635→                            className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border ${lvl.border} ${lvl.bg} p-3`}
+   636→                          >
+   637→                            <div className="flex items-center gap-2 flex-1 min-w-0">
+   638→                              <BadgeCheck className={`size-4 ${lvl.color} shrink-0`} />
+   639→                              <span className="text-sm font-medium text-gray-900 truncate">{skill.name}</span>
+   640→                            </div>
+   641→                            <div className="flex items-center gap-2 shrink-0">
+   642→                              {/* Level dropdown */}
+   643→                              <div className="relative">
+   644→                                <select
+   645→                                  value={skill.level}
+   646→                                  onChange={(e) => updateSkillLevel(skill.name, e.target.value as SkillLevel)}
+   647→                                  className={`appearance-none rounded-lg border ${lvl.border} bg-white px-2.5 py-1.5 pr-7 text-xs font-medium ${lvl.color} cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500`}
+   648→                                >
+   649→                                  <option value="beginner">Beginner</option>
+   650→                                  <option value="intermediate">Intermediate</option>
+   651→                                  <option value="advanced">Advanced</option>
+   652→                                  <option value="expert">Expert</option>
+   653→                                </select>
+   654→                                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-3 pointer-events-none text-gray-400" />
+   655→                              </div>
+   656→                              {/* Years input */}
+   657→                              <div className="flex items-center gap-1">
+   658→                                <Input
+   659→                                  type="number"
+   660→                                  min={0}
+   661→                                  max={50}
+   662→                                  value={skill.years}
+   663→                                  onChange={(e) => updateSkillYears(skill.name, parseInt(e.target.value) || 0)}
+   664→                                  className="w-14 h-8 text-xs text-center rounded-lg border-gray-200"
+   665→                                />
+   666→                                <span className="text-[10px] text-gray-400 font-medium">yrs</span>
+   667→                              </div>
+   668→                              {/* Remove button */}
+   669→                              <button
+   670→                                type="button"
+   671→                                onClick={() => toggleSkill(skill.name)}
+   672→                                className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+   673→                              >
+   674→                                <Minus className="size-3.5" />
+   675→                              </button>
+   676→                            </div>
+   677→                          </div>
+   678→                        );
+   679→                      })}
+   680→                    </div>
+   681→                  )}
+   682→
+   683→                  {/* Add more skills from catalog */}
+   684→                  {(() => {
+   685→                    const catalog = getCatalogByCategory();
+   686→                    const hasCatalog = Object.keys(catalog).length > 0;
+   687→                    if (!hasCatalog) return null;
+   688→                    return (
+   689→                      <div className="space-y-2">
+   690→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Skills</p>
+   691→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   692→                          {Object.entries(catalog).map(([category, skills]) => (
+   693→                            <div key={category} className="mb-3 last:mb-0">
+   694→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   695→                              <div className="flex flex-wrap gap-1.5">
+   696→                                {skills.map((skill) => (
+   697→                                  <button
+   698→                                    key={skill.name}
+   699→                                    type="button"
+   700→                                    onClick={() => toggleSkill(skill.name)}
+   701→                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors active:scale-[0.97]"
+   702→                                  >
+   703→                                    <Plus className="size-3" />
+   704→                                    {skill.name}
+   705→                                  </button>
+   706→                                ))}
+   707→                              </div>
+   708→                            </div>
+   709→                          ))}
+   710→                        </div>
+   711→                      </div>
+   712→                    );
+   713→                  })()}
+   714→                </div>
+   715→              )}
+   716→            </div>
+   717→
+   718→            {/* Services Offered */}
+   719→            <div>
+   720→              <div className="flex items-center justify-between mb-3">
+   721→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   722→                  <IndianRupee className="size-4 text-gray-400" />
+   723→                  Services Offered
+   724→                  {selectedServices.length > 0 && (
+   725→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   726→                      {selectedServices.length} active
+   727→                    </Badge>
+   728→                  )}
+   729→                </h3>
+   730→                {!editingServices ? (
+   731→                  <Button
+   732→                    variant="ghost"
+   733→                    size="sm"
+   734→                    onClick={() => setEditingServices(true)}
+   735→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   736→                  >
+   737→                    <Pencil className="size-3" />
+   738→                    <span className="text-xs">Edit</span>
+   739→                  </Button>
+   740→                ) : (
+   741→                  <div className="flex items-center gap-1">
+   742→                    <Button
+   743→                      variant="ghost"
+   744→                      size="sm"
+   745→                      onClick={handleCancelServices}
+   746→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   747→                    >
+   748→                      <span className="text-xs">Cancel</span>
+   749→                    </Button>
+   750→                    <Button
+   751→                      size="sm"
+   752→                      onClick={handleSaveServices}
+   753→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   754→                    >
+   755→                      <Save className="size-3" />
+   756→                      Save
+   757→                    </Button>
+   758→                  </div>
+   759→                )}
+   760→              </div>
+   761→
+   762→              {!editingServices ? (
+   763→                /* ─── View Mode ─── */
+   764→                <div className="space-y-2">
+   765→                  {selectedServices.length === 0 ? (
+   766→                    <p className="text-xs text-gray-400 italic">No services added yet. Tap Edit to add services you offer.</p>
+   767→                  ) : (
+   768→                    selectedServices.map((service) => (
+   769→                      <div
+   770→                        key={service.name}
+   771→                        className="rounded-lg border border-gray-100 bg-white p-3 hover:border-gray-200 hover:shadow-sm transition-all"
+   772→                      >
+   773→                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   774→                        <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   775→                      </div>
+   776→                    ))
+   777→                  )}
+   778→                </div>
+   779→              ) : (
+   780→                /* ─── Edit Mode ─── */
+   781→                <div className="space-y-4">
+   782→                  {/* Selected services — removable cards */}
+   783→                  {selectedServices.length > 0 && (
+   784→                    <div className="space-y-2">
+   785→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Services</p>
+   786→                      {selectedServices.map((service) => (
+   787→                        <div
+   788→                          key={service.name}
+   789→                          className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3"
+   790→                        >
+   791→                          <div className="flex-1 min-w-0">
+   792→                            <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   793→                            <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   794→                          </div>
+   795→                          <button
+   796→                            type="button"
+   797→                            onClick={() => toggleService(service.name, service.description)}
+   798→                            className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+   799→                          >
+   800→                            <Minus className="size-3.5" />
+   801→                          </button>
+   802→                        </div>
+   803→                      ))}
+   804→                    </div>
+   805→                  )}
+   806→
+   807→                  {/* Add more services from catalog */}
+   808→                  {(() => {
+   809→                    const catalog = getServicesCatalogByCategory();
+   810→                    const hasCatalog = Object.keys(catalog).length > 0;
+   811→                    if (!hasCatalog) return null;
+   812→                    return (
+   813→                      <div className="space-y-2">
+   814→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Services</p>
+   815→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   816→                          {Object.entries(catalog).map(([category, services]) => (
+   817→                            <div key={category} className="mb-3 last:mb-0">
+   818→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   819→                              <div className="flex flex-col gap-1.5">
+   820→                                {services.map((service) => (
+   821→                                  <button
+   822→                                    key={service.name}
+   823→                                    type="button"
+   824→                                    onClick={() => toggleService(service.name, service.description)}
+   825→                                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2.5 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors active:scale-[0.99]"
+   826→                                  >
+   827→                                    <div className="size-6 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
+   828→                                      <Plus className="size-3 text-blue-500" />
+   829→                                    </div>
+   830→                                    <div className="flex-1 min-w-0">
+   831→                                      <p className="text-xs font-medium text-gray-700">{service.name}</p>
+   832→                                      <p className="text-[10px] text-gray-400 truncate">{service.description}</p>
+   833→                                    </div>
+   834→                                  </button>
+   835→                                ))}
+   836→                              </div>
+   837→                            </div>
+   838→                          ))}
+   839→                        </div>
+   840→                      </div>
+   841→                    );
+   842→                  })()}
+   843→                </div>
+   844→              )}
+   845→            </div>
+   846→
+   847→            {/* Certifications */}
+   848→            <div>
+   849→              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+   850→                <GraduationCap className="size-4 text-gray-400" />
+   851→                Certifications & Training
+   852→              </h3>
+   853→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+   854→                {mockCaregiver.specialistProfile.certifications.map((cert) => (
+   855→                  <div
+   856→                    key={cert.name}
+   857→                    className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3"
+   858→                  >
+   859→                    <div className="size-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+   860→                      <BadgeCheck className="size-4 text-emerald-600" />
+   861→                    </div>
+   862→                    <div className="min-w-0">
+   863→                      <p className="text-xs font-semibold text-gray-900">{cert.name}</p>
+   864→                      <p className="text-[11px] text-gray-500">{cert.issuer}</p>
+   865→                      <p className="text-[10px] text-gray-400 mt-0.5">{cert.year}</p>
+   866→                    </div>
+   867→                  </div>
+   868→                ))}
+   869→              </div>
+   870→            </div>
+   871→          </CardContent>
+   872→        </Card>
+   873→      )}
+   874→
+   875→      {/* Section 4: Availability Card */}
+   876→      <Card>
+   877→        <CardHeader className="pb-4">
+   878→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   879→            <Clock className="size-5 text-gray-400" />
+   880→            Weekly Availability
+   881→          </CardTitle>
+   882→        </CardHeader>
+   883→        <Separator />
+   884→        <CardContent className="p-6">
+   885→          <div className="flex items-center justify-between mb-5">
+   886→            <div>
+   887→              <p className="text-sm font-medium text-gray-900">I am available for assignments</p>
+   888→              <p className="text-xs text-gray-500 mt-0.5">
+   889→                {isAvailable ? 'You will receive new assignment notifications' : 'You will not receive new assignments'}
+   890→              </p>
+   891→            </div>
+   892→            <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
+   893→          </div>
+   894→          <div className="space-y-2">
+   895→            {availability.map((day, index) => (
+   896→              <div
+   897→                key={day.day}
+   898→                className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 transition-colors ${
+   899→                  day.isAvailable ? 'bg-blue-50/50' : 'bg-white'
+   900→                }`}
+   901→              >
+   902→                <div className="flex items-center gap-3">
+   903→                  <span className={`text-sm font-medium ${day.isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>{day.day}</span>
+   904→                  {day.isAvailable && <span className="text-xs text-gray-500">{day.startTime} - {day.endTime}</span>}
+   905→                </div>
+   906→                <Switch checked={day.isAvailable} onCheckedChange={() => toggleDayAvailability(index)} />
+   907→              </div>
+   908→            ))}
+   909→          </div>
+   910→        </CardContent>
+   911→      </Card>
+   912→
+   913→      {/* Section 4: Verification Status Card */}
+   914→      <Card>
+   915→        <CardHeader className="pb-4">
+   916→          <div className="flex items-center justify-between">
+   917→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   918→              <Shield className="size-5 text-gray-400" />
+   919→              Verification Status
+   920→            </CardTitle>
+   921→            <Badge
+   922→              className={`rounded-full px-3 py-1 border ${
+   923→                allVerified
+   924→                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+   925→                  : activeCount > 0
+   926→                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+   927→                    : lockedCount > 0
+   928→                      ? 'bg-gray-100 text-gray-600 border-gray-300'
+   929→                      : 'bg-amber-50 text-amber-700 border-amber-200'
+   930→              }`}
+   931→            >
+   932→              {allVerified ? 'Fully Verified' : activeCount > 0 ? 'In Progress' : lockedCount > 0 ? 'Verification Locked' : 'Partially Verified'}
+   933→            </Badge>
+   934→          </div>
+   935→        </CardHeader>
+   936→        <Separator />
+   937→        <CardContent className="p-6">
+   938→          {/* Table-like verification list with clear columns */}
+   939→          <div className="space-y-2">
+   940→            {/* Header row */}
+   941→            <div className="hidden sm:grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+   942→              <span>Document</span>
+   943→              <span className="text-center">Status</span>
+   944→              <span className="text-center">Attempts</span>
+   945→              <span className="text-center">Action</span>
+   946→            </div>
+   947→            {verDisplay.map((item) => {
+   948→              const doc = verificationDocs.find((d) => d.type === item.type);
+   949→              const status = getStatusDisplay(doc?.status || 'not_started');
+   950→              const StatusIcon = status.icon;
+   951→              const attemptsUsed = doc?.attempts?.length || 0;
+   952→              const isLocked = doc?.status === 'max_attempts_reached';
+   953→              const isApproved = doc?.status === 'approved';
+   954→              const isActive = doc?.status === 'submitted' || doc?.status === 'under_review';
+   955→              const needsUpload = doc?.status === 'not_started' || doc?.status === 'rejected';
+   956→
+   957→              return (
+   958→                <div
+   959→                  key={item.title}
+   960→                  role="button"
+   961→                  tabIndex={0}
+   962→                  className={`rounded-xl border p-4 flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center gap-3 transition-all ${
+   963→                    isApproved
+   964→                      ? 'border-emerald-100 bg-emerald-50/30 hover:border-emerald-200 hover:shadow-sm cursor-pointer'
+   965→                      : isActive
+   966→                        ? 'border-blue-100 bg-blue-50/30 hover:border-blue-200 hover:shadow-sm cursor-pointer'
+   967→                        : isLocked
+   968→                          ? 'border-red-100 bg-red-50/20 opacity-70'
+   969→                          : 'border-gray-100 bg-white hover:border-blue-200 hover:shadow-sm cursor-pointer'
+   970→                  }`}
+   971→                  onClick={handleOpenVerification}
+   972→                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenVerification(); } }}
+   973→                >
+   974→                  {/* Column 1: Document name + icon */}
+   975→                  <div className="flex items-center gap-3">
+   976→                    <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${status.bg}`}>
+   977→                      <item.icon className={`size-5 ${status.color}`} />
+   978→                    </div>
+   979→                    <div>
+   980→                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
+   981→                      <p className="text-[11px] text-gray-400 sm:hidden">
+   982→                        <StatusIcon className={`size-3 inline mr-0.5 ${status.color}`} />
+   983→                        {status.label}
+   984→                      </p>
+   985→                    </div>
+   986→                  </div>
+   987→
+   988→                  {/* Column 2: Status badge */}
+   989→                  <Badge
+   990→                    variant="outline"
+   991→                    className={`hidden sm:inline-flex text-[11px] px-2.5 py-0.5 ${
+   992→                      isApproved
+   993→                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+   994→                        : isActive
+   995→                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+   996→                          : isLocked
+   997→                            ? 'bg-red-50 text-red-600 border-red-200'
+   998→                            : 'bg-amber-50 text-amber-700 border-amber-200'
+   999→                    }`}
+  1000→                  >
+  1001→                    <StatusIcon className="size-3 mr-1" />
+  1002→                    {status.label}
+  1003→                  </Badge>
+  1004→
+  1005→                  {/* Column 3: Attempts dots */}
+  1006→                  <div className="hidden sm:flex items-center justify-center gap-1">
+  1007→                    {Array.from({ length: 3 }).map((_, i) => (
+  1008→                      <div
+  1009→                        key={i}
+  1010→                        className={`size-2.5 rounded-full border ${
+  1011→                          i < attemptsUsed
+  1012→                            ? doc.attempts[i]?.status === 'rejected'
+  1013→                              ? 'bg-red-400 border-red-300'
+  1014→                              : doc.attempts[i]?.status === 'approved'
+  1015→                                ? 'bg-emerald-400 border-emerald-300'
+  1016→                                : 'bg-blue-400 border-blue-300'
+  1017→                            : 'bg-white border-gray-200'
+  1018→                        }`}
+  1019→                      />
+  1020→                    ))}
+  1021→                    <span className={`text-[10px] ml-1 font-medium ${
+  1022→                      isLocked ? 'text-red-500' : 'text-gray-400'
+  1023→                    }`}>
+  1024→                      {attemptsUsed}/3
+  1025→                    </span>
+  1026→                  </div>
+  1027→
+  1028→                  {/* Column 4: Action button */}
+  1029→                  <div className="hidden sm:flex justify-center">
+  1030→                    {isApproved ? (
+  1031→                      <span className="text-[11px] text-emerald-600 font-medium">✓ Done</span>
+  1032→                    ) : isLocked ? (
+  1033→                      <span className="text-[11px] text-red-500 font-medium">🔒 Locked</span>
+  1034→                    ) : isActive ? (
+  1035→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
+  1036→                        <Loader2 className="size-3 animate-spin" />
+  1037→                        In Review
+  1038→                      </span>
+  1039→                    ) : (
+  1040→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1 group-hover:underline">
+  1041→                        Upload
+  1042→                        <ArrowUpRight className="size-3" />
+  1043→                      </span>
+  1044→                    )}
+  1045→                  </div>
+  1046→                </div>
+  1047→              );
+  1048→            })}
+  1049→          </div>
+  1050→
+  1051→          {/* Action Buttons — always visible so users can view their verification details */}
+  1052→          <div className="mt-5 flex flex-col sm:flex-row justify-center gap-2">
+  1053→            <Button
+  1054→              onClick={handleOpenVerification}
+  1055→              className={`gap-2 ${hasUnverified ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+  1056→            >
+  1057→              <Shield className="size-4" />
+  1058→              {allVerified ? 'View Verifications' : hasUnverified ? 'Manage Verifications' : 'Track Submission Status'}
+  1059→            </Button>
+  1060→            {(activeCount > 0 || lockedCount > 0) && (
+  1061→              <Button variant="outline" className="gap-2" onClick={handleOpenVerification}>
+  1062→                <Clock className="size-4" />
+  1063→                Track Submission Status
+  1064→              </Button>
+  1065→            )}
+  1066→          </div>
+  1067→
+  1068→          {/* Tracking info for submitted docs */}
+  1069→          {activeCount > 0 && (
+  1070→            <div className="mt-4 rounded-xl bg-indigo-50 border border-indigo-100 p-3.5">
+  1071→              <div className="flex items-start gap-2.5">
+  1072→                <Send className="size-4 text-indigo-500 mt-0.5 shrink-0" />
+  1073→                <div>
+  1074→                  <p className="text-xs font-medium text-indigo-800">
+  1075→                    {activeCount} document{activeCount > 1 ? 's' : ''} submitted to Nurturee backend portal
+  1076→                  </p>
+  1077→                  <p className="text-xs text-indigo-600 mt-0.5">
+  1078→                    Our verification team will review within 24-48 hours. If rejected, you may re-upload (up to 3 attempts total per verification).
+  1079→                  </p>
+  1080→                </div>
+  1081→              </div>
+  1082→            </div>
+  1083→          )}
+  1084→
+  1085→          {/* Warning for locked verifications */}
+  1086→          {lockedCount > 0 && (
+  1087→            <div className="mt-3 rounded-xl bg-red-50 border border-red-100 p-3.5">
+  1088→              <div className="flex items-start gap-2.5">
+  1089→                <Ban className="size-4 text-red-500 mt-0.5 shrink-0" />
+  1090→                <div>
+  1091→                  <p className="text-xs font-medium text-red-800">
+  1092→                    {lockedCount} verification{lockedCount > 1 ? 's' : ''} permanently locked
+  1093→                  </p>
+  1094→                  <p className="text-xs text-red-600 mt-0.5">
+  1095→                    Maximum upload attempts reached. Please contact Nurturee support at{' '}
+  1096→                    <span className="font-medium">support@nurturee.com</span> for assistance.
+  1097→                  </p>
+  1098→                </div>
+  1099→              </div>
+  1100→            </div>
+  1101→          )}
+  1102→        </CardContent>
+  1103→      </Card>
+  1104→
+  1105→      {/* Section 5: About Card */}
+  1106→      <Card>
+  1107→        <CardHeader className="pb-4">
+  1108→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1109→            <Award className="size-5 text-gray-400" />
+  1110→            About
+  1111→          </CardTitle>
+  1112→        </CardHeader>
+  1113→        <Separator />
+  1114→        <CardContent className="p-6">
+  1115→          {!isEditing ? (
+  1116→            <p className="text-sm text-gray-700 leading-relaxed">{profile.bio}</p>
+  1117→          ) : (
+  1118→            <div className="space-y-2">
+  1119→              <Label htmlFor="edit-bio" className="text-xs font-medium text-gray-500">Bio</Label>
+  1120→              <Textarea
+  1121→                id="edit-bio"
+  1122→                value={profile.bio}
+  1123→                onChange={(e) => setProfile((p) => ({ ...p, bio: e.target.value }))}
+  1124→                rows={4}
+  1125→                placeholder="Tell us about yourself and your caregiving experience..."
+  1126→              />
+  1127→            </div>
+  1128→          )}
+  1129→        </CardContent>
+  1130→      </Card>
+  1131→    </div>
+  1132→  );
+  1133→}
+  1134→

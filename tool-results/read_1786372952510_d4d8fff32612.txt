@@ -1,0 +1,699 @@
+     1→// =============================================
+     2→// NURTUREE CAREGIVER PORTAL — Mock Data
+     3→// =============================================
+     4→
+     5→export interface CaregiverProfile {
+     6→  id: string;
+     7→  caregiverId: string;
+     8→  name: string;
+     9→  phone: string;
+    10→  email: string;
+    11→  avatar?: string;
+    12→  specialty: "child_care" | "elder_care";
+    13→  experience: number;
+    14→  qualifications: string;
+    15→  languages: string[];
+    16→  area: string;
+    17→  bio: string;
+    18→  isAvailable: boolean;
+    19→  isVerified: boolean;
+    20→  rating: number;
+    21→  totalAssignments: number;
+    22→  aadhaarVerified: boolean;
+    23→  policeVerified: boolean;
+    24→  medicalFitness: boolean;
+    25→  videoVerified: boolean;
+    26→  availability: { day: string; isAvailable: boolean; startTime: string; endTime: string }[];
+    27→  earnings: {
+    28→    today: number;
+    29→    thisWeek: number;
+    30→    thisMonth: number;
+    31→    total: number;
+    32→    pending: number;
+    33→    paid: number;
+    34→  };
+    35→  profileComplete: boolean;
+    36→  specialistProfile?: {
+    37→    title: string;
+    38→    icon: string;
+    39→    tagline: string;
+    40→    skills: Array<{ name: string; level: 'expert' | 'advanced' | 'intermediate' | 'beginner'; years: number }>;
+    41→    services: Array<{ name: string; description: string; rate: number; unit: string }>;
+    42→    certifications: Array<{ name: string; issuer: string; year: number }>;
+    43→    stats: {
+    44→      completedShifts: number;
+    45→      ongoingAssignments: number;
+    46→      repeatClients: number;
+    47→      averageRating: number;
+    48→      totalReviews: number;
+    49→      yearsActive: number;
+    50→    };
+    51→  };
+    52→}
+    53→
+    54→export interface Patient {
+    55→  id: string;
+    56→  name: string;
+    57→  phone: string;
+    58→  age: number;
+    59→  gender: "Male" | "Female" | "Other";
+    60→  city: string;
+    61→  careType: "elder_care" | "child_care" | "office_care" | "day_care" | "live_in_care" | "hourly_care";
+    62→  bloodGroup?: string;
+    63→  allergies?: string;
+    64→  address?: string;
+    65→  avatar?: string;
+    66→  totalSessions: number;
+    67→  lastSession: string;
+    68→  careNotes: string;
+    69→  medicalHistory?: string;
+    70→  conditions?: string[];
+    71→  // Child care specific fields
+    72→  schoolName?: string;
+    73→  grade?: string;
+    74→  // Elder care specific fields
+    75→  primaryDoctor?: string;
+    76→  emergencyContact?: string;
+    77→}
+    78→
+    79→export interface Shift {
+    80→  id: string;
+    81→  bookingId: string;
+    82→  patientId: string;
+    83→  patientName: string;
+    84→  patientPhone: string;
+    85→  serviceType: string;
+    86→  serviceCategory: "child_care" | "elder_care";
+    87→  consultationMode: "online" | "in_home";
+    88→  status: "confirmed" | "in_progress" | "completed" | "cancelled";
+    89→  date: string;
+    90→  startTime: string;
+    91→  endTime: string;
+    92→  address?: string;
+    93→  city?: string;
+    94→  notes?: string;
+    95→  earnings: number;
+    96→  specialInstructions?: string;
+    97→}
+    98→
+    99→export interface CareTask {
+   100→  id: string;
+   101→  patientId: string;
+   102→  patientName: string;
+   103→  date: string;
+   104→  tasks: TaskItem[];
+   105→}
+   106→
+   107→export interface TaskItem {
+   108→  id: string;
+   109→  category: "medication" | "hygiene" | "nutrition" | "exercise" | "vitals" | "school" | "milestone" | "safety" | "engagement" | "feeding" | "sleep" | "physical_activity" | "learning" | "child_housekeeping" | "other";
+   110→  title: string;
+   111→  description: string;
+   112→  scheduledTime: string;
+   113→  isCompleted: boolean;
+   114→  completedAt?: string;
+   115→  notes?: string;
+   116→}
+   117→
+   118→export interface MedicationLog {
+   119→  id: string;
+   120→  patientId: string;
+   121→  patientName: string;
+   122→  medicine: string;
+   123→  dosage: string;
+   124→  frequency: string;
+   125→  scheduledTime: string;
+   126→  status: "taken" | "missed" | "upcoming" | "skipped";
+   127→  date: string;
+   128→  notes?: string;
+   129→}
+   130→
+   131→export interface Notification {
+   132→  id: string;
+   133→  title: string;
+   134→  message: string;
+   135→  type: "assignment" | "status" | "payment" | "verification" | "info";
+   136→  isRead: boolean;
+   137→  createdAt: string;
+   138→}
+   139→
+   140→export interface EarningRecord {
+   141→  id: string;
+   142→  bookingId: string;
+   143→  patientName: string;
+   144→  serviceType: string;
+   145→  date: string;
+   146→  amount: number;
+   147→  status: "paid" | "pending" | "processing";
+   148→}
+   149→
+   150→// =============================================
+   151→// MOCK CAREGIVER PROFILE
+   152→// =============================================
+   153→export const mockCaregiver: CaregiverProfile = {
+   154→  id: "cg_01",
+   155→  caregiverId: "NR12002125",
+   156→  name: "Priya Sharma",
+   157→  phone: "+919876543210",
+   158→  email: "priya.sharma@nurturee.com",
+   159→  specialty: "elder_care",
+   160→  experience: 5,
+   161→  qualifications: "B.Sc Nursing, Certificate in Geriatric Care",
+   162→  languages: ["English", "Hindi", "Punjabi"],
+   163→  area: "Sector 45, Gurugram",
+   164→  bio: "Compassionate elder care specialist with 5 years of experience in geriatric nursing. Specialized in dementia and Alzheimer's patient care.",
+   165→  isAvailable: true,
+   166→  isVerified: true,
+   167→  rating: 4.8,
+   168→  totalAssignments: 156,
+   169→  aadhaarVerified: false,
+   170→  policeVerified: false,
+   171→  medicalFitness: false,
+   172→  videoVerified: false,
+   173→  profileComplete: true,
+   174→  availability: [
+   175→    { day: "Monday", isAvailable: true, startTime: "08:00", endTime: "18:00" },
+   176→    { day: "Tuesday", isAvailable: true, startTime: "08:00", endTime: "18:00" },
+   177→    { day: "Wednesday", isAvailable: true, startTime: "08:00", endTime: "18:00" },
+   178→    { day: "Thursday", isAvailable: false, startTime: "08:00", endTime: "18:00" },
+   179→    { day: "Friday", isAvailable: true, startTime: "08:00", endTime: "18:00" },
+   180→    { day: "Saturday", isAvailable: true, startTime: "09:00", endTime: "14:00" },
+   181→    { day: "Sunday", isAvailable: false, startTime: "09:00", endTime: "14:00" },
+   182→  ],
+   183→  earnings: {
+   184→    today: 1200,
+   185→    thisWeek: 6800,
+   186→    thisMonth: 28500,
+   187→    total: 342000,
+   188→    pending: 4500,
+   189→    paid: 30000,
+   190→  },
+   191→  specialistProfile: {
+   192→    title: 'Elder Care Specialist',
+   193→    icon: 'heart-pulse',
+   194→    tagline: 'Compassionate geriatric care with specialized training in dementia and Alzheimer support',
+   195→    skills: [
+   196→      { name: 'Dementia & Alzheimer Care', level: 'expert', years: 4 },
+   197→      { name: 'Geriatric Nursing', level: 'expert', years: 5 },
+   198→      { name: 'Medication Management', level: 'advanced', years: 5 },
+   199→      { name: 'Vital Signs Monitoring', level: 'expert', years: 5 },
+   200→      { name: 'Mobility & Physiotherapy Assistance', level: 'intermediate', years: 3 },
+   201→      { name: 'Palliative & End-of-Life Care', level: 'intermediate', years: 2 },
+   202→      { name: 'Nutrition & Diet Planning', level: 'advanced', years: 4 },
+   203→      { name: 'CPR & First Aid', level: 'advanced', years: 5 },
+   204→    ],
+   205→    services: [
+   206→      { name: 'Elderly Day Care', description: 'Full-day in-home care with meals, activities, and companionship', rate: 800, unit: 'day' },
+   207→      { name: 'Live-in Care', description: '24/7 dedicated care for bedridden or critically ill patients', rate: 1500, unit: 'day' },
+   208→      { name: 'Hospital Attendant', description: 'Professional hospital sitter for post-surgery and recovery periods', rate: 700, unit: 'day' },
+   209→      { name: 'Dementia Companion', description: 'Specialized cognitive engagement, memory activities, and safety supervision', rate: 900, unit: 'day' },
+   210→      { name: 'Post-Surgery Recovery', description: 'Wound care, medication management, and rehabilitation support at home', rate: 1000, unit: 'day' },
+   211→      { name: 'Physiotherapy Assistance', description: 'Assist with prescribed physio exercises and mobility training', rate: 600, unit: 'session' },
+   212→    ],
+   213→    certifications: [
+   214→      { name: 'B.Sc Nursing', issuer: 'Maharshi Dayanand University', year: 2019 },
+   215→      { name: 'Certificate in Geriatric Care', issuer: 'AIIMS, New Delhi', year: 2020 },
+   216→      { name: 'Dementia Care Specialist', issuer: 'Alzheimer\'s Society of India', year: 2022 },
+   217→      { name: 'CPR & Basic Life Support', issuer: 'Red Cross Society', year: 2023 },
+   218→      { name: 'Palliative Care Training', issuer: 'Tata Memorial Hospital', year: 2024 },
+   219→    ],
+   220→    stats: {
+   221→      completedShifts: 1247,
+   222→      ongoingAssignments: 3,
+   223→      repeatClients: 42,
+   224→      averageRating: 4.8,
+   225→      totalReviews: 156,
+   226→      yearsActive: 5,
+   227→    },
+   228→  },
+   229→};
+   230→
+   231→// =============================================
+   232→// MOCK PATIENTS
+   233→// =============================================
+   234→export const mockPatients: Patient[] = [
+   235→  {
+   236→    id: "pat_01",
+   237→    name: "Sunita Devi",
+   238→    phone: "+919812345001",
+   239→    age: 72,
+   240→    gender: "Female",
+   241→    city: "Gurugram",
+   242→    careType: "elder_care",
+   243→    bloodGroup: "B+",
+   244→    allergies: "Penicillin",
+   245→    address: "Flat 301, Lotus Tower, Sector 45",
+   246→    totalSessions: 24,
+   247→    lastSession: "2025-07-14",
+   248→    careNotes: "Patient has mild dementia. Needs reminders for medication. Prefers warm food. Enjoys morning walks with assistance.",
+   249→    medicalHistory: "Hypertension, Type 2 Diabetes, Mild Dementia",
+   250→    primaryDoctor: "Dr. Anita Verma",
+   251→    emergencyContact: "+919812345099",
+   252→    conditions: ["Hypertension", "Diabetes", "Dementia"],
+   253→  },
+   254→  {
+   255→    id: "pat_02",
+   256→    name: "Rajesh Kumar",
+   257→    phone: "+919812345002",
+   258→    age: 68,
+   259→    gender: "Male",
+   260→    city: "Gurugram",
+   261→    careType: "elder_care",
+   262→    bloodGroup: "O+",
+   263→    address: "House 42, Palm Heights, Sector 57",
+   264→    totalSessions: 18,
+   265→    lastSession: "2025-07-13",
+   266→    careNotes: "Post-hip surgery recovery. Needs assistance with mobility exercises. Physiotherapy daily at 10 AM.",
+   267→    medicalHistory: "Hip Replacement Surgery, Osteoarthritis",
+   268→    primaryDoctor: "Dr. Rajiv Gupta",
+   269→    conditions: ["Post-Surgery Recovery", "Arthritis"],
+   270→  },
+   271→  {
+   272→    id: "pat_03",
+   273→    name: "Meena Agarwal",
+   274→    phone: "+919812345003",
+   275→    age: 78,
+   276→    gender: "Female",
+   277→    city: "Gurugram",
+   278→    careType: "elder_care",
+   279→    bloodGroup: "A+",
+   280→    allergies: "Sulfa drugs",
+   281→    address: "Villa 7, Greenwood Estate, Sector 38",
+   282→    totalSessions: 32,
+   283→    lastSession: "2025-07-14",
+   284→    careNotes: "Alzheimer's patient. Requires constant supervision. Wanders if left alone. Calms down with music therapy.",
+   285→    medicalHistory: "Alzheimer's Disease, Arthritis, Insomnia",
+   286→    primaryDoctor: "Dr. Sunita Rao",
+   287→    conditions: ["Alzheimer's", "Arthritis", "Insomnia"],
+   288→  },
+   289→  {
+   290→    id: "pat_04",
+   291→    name: "Om Prakash",
+   292→    phone: "+919812345004",
+   293→    age: 65,
+   294→    gender: "Male",
+   295→    city: "Gurugram",
+   296→    careType: "elder_care",
+   297→    address: "Flat 1205, Skyline Tower, Sector 30",
+   298→    totalSessions: 8,
+   299→    lastSession: "2025-07-12",
+   300→    careNotes: "New patient. Recovering from stroke. Left side weakness. Speech therapy ongoing.",
+   301→    medicalHistory: "Ischemic Stroke, Hypertension",
+   302→    primaryDoctor: "Dr. Prakash Menon",
+   303→    conditions: ["Post-Stroke Recovery", "Hypertension"],
+   304→  },
+   305→  {
+   306→    id: "pat_05",
+   307→    name: "Kamla Sharma",
+   308→    phone: "+919812345005",
+   309→    age: 80,
+   310→    gender: "Female",
+   311→    city: "Gurugram",
+   312→    careType: "elder_care",
+   313→    bloodGroup: "AB+",
+   314→    address: "B-12, Railway Colony, Sector 12",
+   315→    totalSessions: 45,
+   316→    lastSession: "2025-07-14",
+   317→    careNotes: "Bedridden patient. Needs turning every 2 hours. Diabetic wound care on left foot. Diet: low sugar, high protein.",
+   318→    medicalHistory: "Bedridden, Diabetic Ulcer, Heart Disease",
+   319→    primaryDoctor: "Dr. Meena Iyer",
+   320→    conditions: ["Bedridden Care", "Diabetic Wound", "Heart Disease"],
+   321→  },
+   322→  {
+   323→    id: "pat_06",
+   324→    name: "Harish Chandra",
+   325→    phone: "+919812345006",
+   326→    age: 71,
+   327→    gender: "Male",
+   328→    city: "Gurugram",
+   329→    careType: "elder_care",
+   330→    address: "E-3, Sushant Lok, Phase I",
+   331→    totalSessions: 12,
+   332→    lastSession: "2025-07-11",
+   333→    careNotes: "Parkinson's disease. Tremors managed with medication. Needs help with fine motor tasks like buttoning shirts.",
+   334→    medicalHistory: "Parkinson's Disease, Depression",
+   335→    primaryDoctor: "Dr. Vikram Singh",
+   336→    conditions: ["Parkinson's", "Depression"],
+   337→  },
+   338→  // ── CHILD CARE PATIENTS ──
+   339→  {
+   340→    id: "pat_07",
+   341→    name: "Aarav Mehta",
+   342→    phone: "+919812345007",
+   343→    age: 6,
+   344→    gender: "Male",
+   345→    city: "Gurugram",
+   346→    careType: "child_care",
+   347→    allergies: "Peanuts, tree nuts",
+   348→    address: "Flat 802, Avalon Court, Sector 56",
+   349→    totalSessions: 48,
+   350→    lastSession: "2025-07-14",
+   351→    careNotes: "Energetic child. Loves building blocks and drawing. Needs help with school homework. Mild peanut allergy — EpiPen in blue school bag. Parent: Sneha Mehta.",
+   352→    schoolName: "DPS Sector 56",
+   353→    grade: "Class 1",
+   354→  },
+   355→  {
+   356→    id: "pat_08",
+   357→    name: "Anaya Kapoor",
+   358→    phone: "+919812345008",
+   359→    age: 9,
+   360→    gender: "Female",
+   361→    city: "Gurugram",
+   362→    careType: "child_care",
+   363→    allergies: "Dust mites",
+   364→    address: "House 15, DLF Phase 3",
+   365→    totalSessions: 30,
+   366→    lastSession: "2025-07-13",
+   367→    careNotes: "Quiet and creative. Enjoys reading, dance, and cycling. Needs encouragement to socialise. Parent: Rhea Kapoor.",
+   368→    schoolName: "Shikshantar School",
+   369→    grade: "Class 4",
+   370→  },
+   371→];
+   372→
+   373→// =============================================
+   374→// MOCK SHIFTS / BOOKINGS
+   375→// =============================================
+   376→const today = new Date();
+   377→const todayStr = today.toISOString().split("T")[0];
+   378→const yesterdayStr = new Date(today.getTime() - 86400000).toISOString().split("T")[0];
+   379→const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().split("T")[0];
+   380→
+   381→export const mockShifts: Shift[] = [
+   382→  {
+   383→    id: "sh_01",
+   384→    bookingId: "RA384721",
+   385→    patientId: "pat_01",
+   386→    patientName: "Sunita Devi",
+   387→    patientPhone: "+919812345001",
+   388→    serviceType: "Full-Time 24hr Care",
+   389→    serviceCategory: "elder_care",
+   390→    consultationMode: "in_home",
+   391→    status: "completed",
+   392→    date: todayStr,
+   393→    startTime: "08:00",
+   394→    endTime: "14:00",
+   395→    address: "Flat 301, Lotus Tower, Sector 45, Gurugram",
+   396→    city: "Gurugram",
+   397→    notes: "Morning medication at 8 AM, breakfast by 9 AM",
+   398→    earnings: 700,
+   399→    specialInstructions: "Patient has mild dementia. Keep all exits locked. Call family if agitated.",
+   400→  },
+   401→  {
+   402→    id: "sh_02",
+   403→    bookingId: "RA384735",
+   404→    patientId: "pat_03",
+   405→    patientName: "Meena Agarwal",
+   406→    patientPhone: "+919812345003",
+   407→    serviceType: "Dementia/Alzheimer's Care",
+   408→    serviceCategory: "elder_care",
+   409→    consultationMode: "in_home",
+   410→    status: "in_progress",
+   411→    date: todayStr,
+   412→    startTime: "14:00",
+   413→    endTime: "20:00",
+   414→    address: "Villa 7, Greenwood Estate, Sector 38, Gurugram",
+   415→    city: "Gurugram",
+   416→    earnings: 800,
+   417→    specialInstructions: "Play familiar old Bollywood songs to calm patient. Do not leave unattended.",
+   418→  },
+   419→  {
+   420→    id: "sh_03",
+   421→    bookingId: "RA384750",
+   422→    patientId: "pat_05",
+   423→    patientName: "Kamla Sharma",
+   424→    patientPhone: "+919812345005",
+   425→    serviceType: "Medical Attendant",
+   426→    serviceCategory: "elder_care",
+   427→    consultationMode: "in_home",
+   428→    status: "confirmed",
+   429→    date: tomorrowStr,
+   430→    startTime: "08:00",
+   431→    endTime: "14:00",
+   432→    address: "B-12, Railway Colony, Sector 12, Gurugram",
+   433→    city: "Gurugram",
+   434→    earnings: 600,
+   435→    specialInstructions: "Change dressing on left foot wound. Check blood sugar at 9 AM and 1 PM.",
+   436→  },
+   437→  {
+   438→    id: "sh_04",
+   439→    bookingId: "RA384710",
+   440→    patientId: "pat_02",
+   441→    patientName: "Rajesh Kumar",
+   442→    patientPhone: "+919812345002",
+   443→    serviceType: "Post-Hospitalisation Care",
+   444→    serviceCategory: "elder_care",
+   445→    consultationMode: "in_home",
+   446→    status: "completed",
+   447→    date: yesterdayStr,
+   448→    startTime: "09:00",
+   449→    endTime: "15:00",
+   450→    address: "House 42, Palm Heights, Sector 57, Gurugram",
+   451→    city: "Gurugram",
+   452→    earnings: 650,
+   453→    notes: "Assist with physiotherapy exercises. Monitor pain levels.",
+   454→  },
+   455→  {
+   456→    id: "sh_05",
+   457→    bookingId: "RA384765",
+   458→    patientId: "pat_04",
+   459→    patientName: "Om Prakash",
+   460→    patientPhone: "+919812345004",
+   461→    serviceType: "Medical Attendant",
+   462→    serviceCategory: "elder_care",
+   463→    consultationMode: "in_home",
+   464→    status: "confirmed",
+   465→    date: tomorrowStr,
+   466→    startTime: "15:00",
+   467→    endTime: "19:00",
+   468→    address: "Flat 1205, Skyline Tower, Sector 30, Gurugram",
+   469→    city: "Gurugram",
+   470→    earnings: 500,
+   471→    specialInstructions: "Help with speech exercises. Assist with walking using walker.",
+   472→  },
+   473→  {
+   474→    id: "sh_06",
+   475→    bookingId: "RA384780",
+   476→    patientId: "pat_06",
+   477→    patientName: "Harish Chandra",
+   478→    patientPhone: "+919812345006",
+   479→    serviceType: "Companionship & Care",
+   480→    serviceCategory: "elder_care",
+   481→    consultationMode: "in_home",
+   482→    status: "confirmed",
+   483→    date: tomorrowStr,
+   484→    startTime: "10:00",
+   485→    endTime: "13:00",
+   486→    address: "E-3, Sushant Lok, Phase I, Gurugram",
+   487→    city: "Gurugram",
+   488→    earnings: 450,
+   489→  },
+   490→  {
+   491→    id: "sh_07",
+   492→    bookingId: "RA384695",
+   493→    patientId: "pat_01",
+   494→    patientName: "Sunita Devi",
+   495→    patientPhone: "+919812345001",
+   496→    serviceType: "Full-Time 24hr Care",
+   497→    serviceCategory: "elder_care",
+   498→    consultationMode: "in_home",
+   499→    status: "completed",
+   500→    date: yesterdayStr,
+   501→    startTime: "08:00",
+   502→    endTime: "20:00",
+   503→    address: "Flat 301, Lotus Tower, Sector 45, Gurugram",
+   504→    city: "Gurugram",
+   505→    earnings: 900,
+   506→  },
+   507→  {
+   508→    id: "sh_08",
+   509→    bookingId: "RA384690",
+   510→    patientId: "pat_03",
+   511→    patientName: "Meena Agarwal",
+   512→    patientPhone: "+919812345003",
+   513→    serviceType: "Dementia/Alzheimer's Care",
+   514→    serviceCategory: "elder_care",
+   515→    consultationMode: "in_home",
+   516→    status: "cancelled",
+   517→    date: yesterdayStr,
+   518→    startTime: "14:00",
+   519→    endTime: "20:00",
+   520→    address: "Villa 7, Greenwood Estate, Sector 38, Gurugram",
+   521→    city: "Gurugram",
+   522→    earnings: 0,
+   523→    notes: "Cancelled by family — patient hospitalised for routine checkup",
+   524→  },
+   525→  // ── CHILD CARE SHIFTS ──
+   526→  {
+   527→    id: "sh_09",
+   528→    bookingId: "RA384810",
+   529→    patientId: "pat_07",
+   530→    patientName: "Aarav Mehta",
+   531→    patientPhone: "+919812345007",
+   532→    serviceType: "After-School Nanny Care",
+   533→    serviceCategory: "child_care",
+   534→    consultationMode: "in_home",
+   535→    status: "in_progress",
+   536→    date: todayStr,
+   537→    startTime: "14:00",
+   538→    endTime: "18:00",
+   539→    address: "Flat 802, Avalon Court, Sector 56, Gurugram",
+   540→    city: "Gurugram",
+   541→    earnings: 550,
+   542→    specialInstructions: "Peanut allergy — no peanuts or tree nuts. EpiPen in blue school bag. Parent: Sneha Mehta.",
+   543→  },
+   544→  {
+   545→    id: "sh_10",
+   546→    bookingId: "RA384820",
+   547→    patientId: "pat_08",
+   548→    patientName: "Anaya Kapoor",
+   549→    patientPhone: "+919812345008",
+   550→    serviceType: "After-School Nanny Care",
+   551→    serviceCategory: "child_care",
+   552→    consultationMode: "in_home",
+   553→    status: "confirmed",
+   554→    date: tomorrowStr,
+   555→    startTime: "15:00",
+   556→    endTime: "19:00",
+   557→    address: "House 15, DLF Phase 3, Gurugram",
+   558→    city: "Gurugram",
+   559→    earnings: 500,
+   560→    specialInstructions: "Help with Class 4 homework. Encourage outdoor play. Parent: Rhea Kapoor.",
+   561→  },
+   562→];
+   563→
+   564→// =============================================
+   565→// MOCK CARE TASKS
+   566→// =============================================
+   567→export const mockCareTasks: CareTask[] = [
+   568→  {
+   569→    id: "ct_01",
+   570→    patientId: "pat_01",
+   571→    patientName: "Sunita Devi",
+   572→    date: todayStr,
+   573→    tasks: [
+   574→      { id: "t_01", category: "medication", title: "Morning Medication", description: "Give BP pill (Telmisartan 40mg) and diabetes pill (Metformin 500mg)", scheduledTime: "08:00", isCompleted: true, completedAt: "08:05" },
+   575→      { id: "t_02", category: "vitals", title: "Check Blood Pressure", description: "Measure and record BP. Report if above 140/90", scheduledTime: "08:15", isCompleted: true, completedAt: "08:20" },
+   576→      { id: "t_03", category: "vitals", title: "Check Blood Sugar", description: "Fasting blood sugar test before breakfast", scheduledTime: "08:30", isCompleted: true, completedAt: "08:35" },
+   577→      { id: "t_04", category: "nutrition", title: "Prepare Breakfast", description: "Oatmeal with low sugar, seasonal fruit, green tea", scheduledTime: "09:00", isCompleted: true, completedAt: "09:10" },
+   578→      { id: "t_05", category: "exercise", title: "Morning Walk", description: "Assisted walk in society garden for 20 minutes", scheduledTime: "10:00", isCompleted: false },
+   579→      { id: "t_06", category: "medication", title: "Afternoon Medication", description: "Give afternoon diabetes pill", scheduledTime: "13:00", isCompleted: false },
+   580→      { id: "t_07", category: "nutrition", title: "Prepare Lunch", description: "Dal rice, sabzi, curd. Low salt, low oil.", scheduledTime: "13:30", isCompleted: false },
+   581→      { id: "t_08", category: "hygiene", title: "Afternoon Rest & Hygiene", description: "Help with changing clothes, freshen up", scheduledTime: "15:00", isCompleted: false },
+   582→    ],
+   583→  },
+   584→  {
+   585→    id: "ct_02",
+   586→    patientId: "pat_03",
+   587→    patientName: "Meena Agarwal",
+   588→    date: todayStr,
+   589→    tasks: [
+   590→      { id: "t_09", category: "medication", title: "Alzheimer's Medication", description: "Donepezil 10mg — must be taken with food", scheduledTime: "14:15", isCompleted: true, completedAt: "14:20" },
+   591→      { id: "t_10", category: "nutrition", title: "Evening Snack", description: "Light snack — khari biscuit with chai. Low sugar.", scheduledTime: "16:00", isCompleted: false },
+   592→      { id: "t_11", category: "exercise", title: "Music Therapy Session", description: "Play old Lata Mangeshkar songs for 30 minutes", scheduledTime: "17:00", isCompleted: false },
+   593→      { id: "t_12", category: "hygiene", title: "Evening Bath", description: "Assist with sponge bath. Check skin for bedsores.", scheduledTime: "18:00", isCompleted: false },
+   594→      { id: "t_13", category: "medication", title: "Dinner Medication", description: "Donepezil 5mg evening dose, Arthritis pain relief", scheduledTime: "19:30", isCompleted: false },
+   595→      { id: "t_14", category: "nutrition", title: "Prepare Dinner", description: "Khichdi with vegetables. Easy to digest.", scheduledTime: "20:00", isCompleted: false },
+   596→    ],
+   597→  },
+   598→  // ── CHILD CARE TASKS: Aarav Mehta ──
+   599→  {
+   600→    id: "ct_03",
+   601→    patientId: "pat_07",
+   602→    patientName: "Aarav Mehta",
+   603→    date: todayStr,
+   604→    tasks: [
+   605→      { id: "t_15", category: "hygiene", title: "After-School Freshen Up", description: "Wash hands, face, change from school uniform to home clothes", scheduledTime: "14:15", isCompleted: true, completedAt: "14:20" },
+   606→      { id: "t_16", category: "feeding", title: "Afternoon Snack", description: "Peanut-free snack — cucumber sandwich with juice. Check ingredient labels!", scheduledTime: "14:30", isCompleted: true, completedAt: "14:35" },
+   607→      { id: "t_17", category: "school", title: "School Homework Review", description: "Check Class 1 homework diary. Help with Maths and English worksheets", scheduledTime: "15:00", isCompleted: false },
+   608→      { id: "t_18", category: "engagement", title: "Free Play Time", description: "Building blocks or drawing for 30 minutes. Let child choose activity.", scheduledTime: "15:45", isCompleted: false },
+   609→      { id: "t_19", category: "nutrition", title: "Evening Snack", description: "Cut fruits (apple, banana) and a glass of milk", scheduledTime: "16:30", isCompleted: false },
+   610→      { id: "t_20", category: "sleep", title: "Quiet Rest / Nap Time", description: "Encourage 20 min quiet rest with storybook. Dim lights.", scheduledTime: "17:00", isCompleted: false },
+   611→      { id: "t_21", category: "safety", title: "Allergy Check", description: "Ensure no peanut products in house. Check EpiPen expiry date.", scheduledTime: "17:30", isCompleted: false },
+   612→      { id: "t_22", category: "learning", title: "Reading Session", description: "Read one story from Panchatantra. Ask child to narrate back.", scheduledTime: "17:45", isCompleted: false },
+   613→    ],
+   614→  },
+   615→  // ── CHILD CARE TASKS: Anaya Kapoor ──
+   616→  {
+   617→    id: "ct_04",
+   618→    patientId: "pat_08",
+   619→    patientName: "Anaya Kapoor",
+   620→    date: todayStr,
+   621→    tasks: [
+   622→      { id: "t_23", category: "school", title: "Pick Up from School", description: "Pick up from Shikshantar School gate at 2:45 PM. Carry ID card.", scheduledTime: "14:45", isCompleted: true, completedAt: "14:50" },
+   623→      { id: "t_24", category: "feeding", title: "After-School Snack", description: "Prepare light snack — bread butter, juice. Ask what she wants.", scheduledTime: "15:15", isCompleted: true, completedAt: "15:20" },
+   624→      { id: "t_25", category: "learning", title: "Homework Help", description: "Class 4 Maths (fractions) and English (essay writing). Be patient.", scheduledTime: "15:45", isCompleted: false },
+   625→      { id: "t_26", category: "engagement", title: "Dance Practice", description: "Anaya has dance class coming up. Help her practice Bharatanatyam routine.", scheduledTime: "16:30", isCompleted: false },
+   626→      { id: "t_27", category: "physical_activity", title: "Cycling in Park", description: "Supervise cycling in society park for 20 minutes. Helmet mandatory.", scheduledTime: "17:15", isCompleted: false },
+   627→    ],
+   628→  },
+   629→];
+   630→
+   631→// =============================================
+   632→// MOCK MEDICATION LOG
+   633→// =============================================
+   634→export const mockMedications: MedicationLog[] = [
+   635→  { id: "med_01", patientId: "pat_01", patientName: "Sunita Devi", medicine: "Telmisartan 40mg", dosage: "1 tablet", frequency: "Once daily (morning)", scheduledTime: "08:00", status: "taken", date: todayStr, notes: "Taken with water after breakfast" },
+   636→  { id: "med_02", patientId: "pat_01", patientName: "Sunita Devi", medicine: "Metformin 500mg", dosage: "1 tablet", frequency: "Twice daily", scheduledTime: "08:00", status: "taken", date: todayStr },
+   637→  { id: "med_03", patientId: "pat_01", patientName: "Sunita Devi", medicine: "Metformin 500mg", dosage: "1 tablet", frequency: "Twice daily", scheduledTime: "13:00", status: "upcoming", date: todayStr },
+   638→  { id: "med_04", patientId: "pat_01", patientName: "Sunita Devi", medicine: "Atorvastatin 10mg", dosage: "1 tablet", frequency: "Once daily (bedtime)", scheduledTime: "21:00", status: "upcoming", date: todayStr },
+   639→  { id: "med_05", patientId: "pat_03", patientName: "Meena Agarwal", medicine: "Donepezil 10mg", dosage: "1 tablet", frequency: "Once daily (morning)", scheduledTime: "14:15", status: "taken", date: todayStr, notes: "Must take with food" },
+   640→  { id: "med_06", patientId: "pat_03", patientName: "Meena Agarwal", medicine: "Donepezil 5mg", dosage: "1 tablet", frequency: "Once daily (evening)", scheduledTime: "19:30", status: "upcoming", date: todayStr },
+   641→  { id: "med_07", patientId: "pat_03", patientName: "Meena Agarwal", medicine: "Ibuprofen 400mg", dosage: "1 tablet", frequency: "As needed for arthritis pain", scheduledTime: "19:30", status: "upcoming", date: todayStr },
+   642→  { id: "med_08", patientId: "pat_05", patientName: "Kamla Sharma", medicine: "Insulin Glargine", dosage: "20 units", frequency: "Once daily (morning)", scheduledTime: "07:00", status: "upcoming", date: tomorrowStr },
+   643→  { id: "med_09", patientId: "pat_05", patientName: "Kamla Sharma", medicine: "Aspirin 75mg", dosage: "1 tablet", frequency: "Once daily", scheduledTime: "08:00", status: "upcoming", date: tomorrowStr },
+   644→  { id: "med_06_missed", patientId: "pat_01", patientName: "Sunita Devi", medicine: "Calcium + Vitamin D", dosage: "1 tablet", frequency: "Once daily (after lunch)", scheduledTime: "13:30", status: "missed", date: yesterdayStr, notes: "Patient was sleeping. Family notified." },
+   645→];
+   646→
+   647→// =============================================
+   648→// MOCK NOTIFICATIONS
+   649→// =============================================
+   650→export const mockNotifications: Notification[] = [
+   651→  { id: "n_01", title: "New Shift Assigned", message: "You have been assigned to Kamla Sharma for tomorrow, 8:00 AM - 2:00 PM. Medical Attendant service.", type: "assignment", isRead: false, createdAt: new Date(today.getTime() - 1800000).toISOString() },
+   652→  { id: "n_02", title: "Shift Completed", message: "Your shift for Sunita Devi (RA384721) has been marked as completed. ₹700 earned.", type: "status", isRead: false, createdAt: new Date(today.getTime() - 7200000).toISOString() },
+   653→  { id: "n_03", title: "Payment Processed", message: "Payment of ₹9,500 for last week's shifts has been processed and will be credited within 48 hours.", type: "payment", isRead: false, createdAt: new Date(today.getTime() - 86400000).toISOString() },
+   654→  { id: "n_04", title: "Verification Approved", message: "Your Police Verification has been approved. All verifications are now complete.", type: "verification", isRead: true, createdAt: new Date(today.getTime() - 259200000).toISOString() },
+   655→  { id: "n_05", title: "Schedule Update", message: "Meena Agarwal's family has changed the Thursday shift to Friday 2-8 PM.", type: "info", isRead: true, createdAt: new Date(today.getTime() - 345600000).toISOString() },
+   656→  { id: "n_06", title: "Shift Cancelled", message: "Shift for Meena Agarwal (RA384690) on yesterday has been cancelled by family.", type: "status", isRead: true, createdAt: new Date(today.getTime() - 432000000).toISOString() },
+   657→];
+   658→
+   659→// =============================================
+   660→// MOCK EARNINGS RECORDS
+   661→// =============================================
+   662→export const mockEarnings: EarningRecord[] = [
+   663→  { id: "e_01", bookingId: "RA384721", patientName: "Sunita Devi", serviceType: "Full-Time 24hr Care", date: todayStr, amount: 700, status: "paid" },
+   664→  { id: "e_02", bookingId: "RA384710", patientName: "Rajesh Kumar", serviceType: "Post-Hospitalisation Care", date: yesterdayStr, amount: 650, status: "paid" },
+   665→  { id: "e_03", bookingId: "RA384695", patientName: "Sunita Devi", serviceType: "Full-Time 24hr Care", date: yesterdayStr, amount: 900, status: "paid" },
+   666→  { id: "e_04", bookingId: "RA384680", patientName: "Kamla Sharma", serviceType: "Medical Attendant", date: new Date(today.getTime() - 2 * 86400000).toISOString().split("T")[0], amount: 600, status: "paid" },
+   667→  { id: "e_05", bookingId: "RA384670", patientName: "Harish Chandra", serviceType: "Companionship & Care", date: new Date(today.getTime() - 2 * 86400000).toISOString().split("T")[0], amount: 450, status: "paid" },
+   668→  { id: "e_06", bookingId: "RA384660", patientName: "Meena Agarwal", serviceType: "Dementia/Alzheimer's Care", date: new Date(today.getTime() - 3 * 86400000).toISOString().split("T")[0], amount: 800, status: "paid" },
+   669→  { id: "e_07", bookingId: "RA384650", patientName: "Sunita Devi", serviceType: "Full-Time 24hr Care", date: new Date(today.getTime() - 3 * 86400000).toISOString().split("T")[0], amount: 700, status: "processing" },
+   670→  { id: "e_08", bookingId: "RA384640", patientName: "Rajesh Kumar", serviceType: "Post-Hospitalisation Care", date: new Date(today.getTime() - 4 * 86400000).toISOString().split("T")[0], amount: 650, status: "paid" },
+   671→  { id: "e_09", bookingId: "RA384630", patientName: "Kamla Sharma", serviceType: "Medical Attendant", date: new Date(today.getTime() - 5 * 86400000).toISOString().split("T")[0], amount: 600, status: "pending" },
+   672→  { id: "e_10", bookingId: "RA384620", patientName: "Om Prakash", serviceType: "Medical Attendant", date: new Date(today.getTime() - 5 * 86400000).toISOString().split("T")[0], amount: 500, status: "pending" },
+   673→  { id: "e_11", bookingId: "RA384610", patientName: "Meena Agarwal", serviceType: "Dementia/Alzheimer's Care", date: new Date(today.getTime() - 6 * 86400000).toISOString().split("T")[0], amount: 800, status: "paid" },
+   674→  { id: "e_12", bookingId: "RA384600", patientName: "Sunita Devi", serviceType: "Full-Time 24hr Care", date: new Date(today.getTime() - 7 * 86400000).toISOString().split("T")[0], amount: 700, status: "paid" },
+   675→];
+   676→
+   677→// =============================================
+   678→// MONTHLY EARNINGS CHART DATA
+   679→// =============================================
+   680→export const mockMonthlyEarnings = [
+   681→  { month: "Jan", earnings: 24500 },
+   682→  { month: "Feb", earnings: 26800 },
+   683→  { month: "Mar", earnings: 31200 },
+   684→  { month: "Apr", earnings: 28500 },
+   685→  { month: "May", earnings: 29800 },
+   686→  { month: "Jun", earnings: 32400 },
+   687→  { month: "Jul", earnings: 28500 },
+   688→];
+   689→
+   690→export const mockWeeklyEarnings = [
+   691→  { day: "Mon", earnings: 1200 },
+   692→  { day: "Tue", earnings: 1400 },
+   693→  { day: "Wed", earnings: 0 },
+   694→  { day: "Thu", earnings: 1600 },
+   695→  { day: "Fri", earnings: 1300 },
+   696→  { day: "Sat", earnings: 900 },
+   697→  { day: "Sun", earnings: 0 },
+   698→];
+   699→

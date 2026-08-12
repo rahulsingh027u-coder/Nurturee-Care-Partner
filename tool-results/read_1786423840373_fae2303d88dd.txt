@@ -1,0 +1,1364 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo } from 'react';
+     4→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Label } from '@/components/ui/label';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Switch } from '@/components/ui/switch';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import {
+    13→  UserCircle,
+    14→  Star,
+    15→  MapPin,
+    16→  Phone,
+    17→  Mail,
+    18→  Shield,
+    19→  CheckCircle,
+    20→  XCircle,
+    21→  Clock,
+    22→  Edit3,
+    23→  Save,
+    24→  X,
+    25→  Camera,
+    26→  Award,
+    27→  FileCheck,
+    28→  Heart,
+    29→  Globe,
+    30→  Briefcase,
+    31→  Send,
+    32→  AlertCircle,
+    33→  Loader2,
+    34→  ArrowUpRight,
+    35→  Ban,
+    36→  Stethoscope,
+    37→  GraduationCap,
+    38→  Sparkles,
+    39→  TrendingUp,
+    40→  BadgeCheck,
+    41→  IndianRupee,
+    42→  Activity,
+    43→  Pencil,
+    44→  Plus,
+    45→  Minus,
+    46→  ChevronDown,
+    47→  MessageSquare,
+    48→  PhoneCall,
+    49→  Siren,
+    50→} from 'lucide-react';
+    51→import { mockCarePartner, mockShifts, mockReviews } from '@/lib/care-partner-data';
+    52→
+    53→const VERIFICATION_STORAGE_KEY = 'nurturee_care_partner_verification';
+    54→const STORAGE_VERSION_KEY = 'nurturee_care_partner_verification_v2';
+    55→const CURRENT_STORAGE_VERSION = 4;
+    56→
+    57→// ─── Skills Catalog ─────────────────────────────────────────────────────────
+    58→// All available skills Care partners can choose from
+    59→const SKILLS_CATALOG = [
+    60→  { name: 'Dementia & Alzheimer Care', category: 'Specialized' },
+    61→  { name: 'Geriatric Nursing', category: 'Medical' },
+    62→  { name: 'Medication Management', category: 'Medical' },
+    63→  { name: 'Vital Signs Monitoring', category: 'Medical' },
+    64→  { name: 'Mobility & Physiotherapy Assistance', category: 'Physical' },
+    65→  { name: 'Palliative & End-of-Life Care', category: 'Specialized' },
+    66→  { name: 'Nutrition & Diet Planning', category: 'Wellness' },
+    67→  { name: 'CPR & First Aid', category: 'Medical' },
+    68→  { name: 'Patient Hygiene & Grooming', category: 'Personal Care' },
+    69→  { name: 'Wound Care Management', category: 'Medical' },
+    70→  { name: 'Diabetes Management', category: 'Medical' },
+    71→  { name: 'Oxygen & Respiratory Care', category: 'Medical' },
+    72→  { name: 'Emotional & Mental Health Support', category: 'Wellness' },
+    73→  { name: 'Child Development & Activities', category: 'Child Care' },
+    74→  { name: 'Newborn & Infant Care', category: 'Child Care' },
+    75→  { name: 'Feeding & Lactation Support', category: 'Child Care' },
+    76→  { name: 'Speech & Language Therapy Assistance', category: 'Therapy' },
+    77→  { name: 'Behavioral Management', category: 'Specialized' },
+    78→  { name: 'Home Safety Assessment', category: 'Safety' },
+    79→  { name: 'Emergency Response', category: 'Safety' },
+    80→] as const;
+    81→
+    82→type SkillLevel = 'expert' | 'advanced' | 'intermediate' | 'beginner';
+    83→
+    84→interface SelectedSkill {
+    85→  name: string;
+    86→  level: SkillLevel;
+    87→  years: number;
+    88→}
+    89→
+    90→const LEVEL_CONFIG: Record<SkillLevel, { color: string; bg: string; border: string; label: string }> = {
+    91→  expert: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Expert' },
+    92→  advanced: { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', label: 'Advanced' },
+    93→  intermediate: { color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-200', label: 'Intermediate' },
+    94→  beginner: { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Beginner' },
+    95→};
+    96→
+    97→// ─── Services Catalog ────────────────────────────────────────────────────────
+    98→const SERVICES_CATALOG = [
+    99→  { name: 'Elderly Day Care', description: 'Full-day in-home care with meals, activities, and companionship', category: 'Elder Care' },
+   100→  { name: 'Live-in Care', description: '24/7 dedicated care for bedridden or critically ill patients', category: 'Elder Care' },
+   101→  { name: 'Hospital Attendant', description: 'Professional hospital sitter for post-surgery and recovery periods', category: 'Medical' },
+   102→  { name: 'Dementia Companion', description: 'Specialized cognitive engagement, memory activities, and safety supervision', category: 'Specialized' },
+   103→  { name: 'Post-Surgery Recovery', description: 'Wound care, medication management, and rehabilitation support at home', category: 'Medical' },
+   104→  { name: 'Physiotherapy Assistance', description: 'Assist with prescribed physio exercises and mobility training', category: 'Therapy' },
+   105→  { name: 'Newborn & Infant Care', description: 'Round-the-clock infant feeding, bathing, sleep routine, and mother support', category: 'Child Care' },
+   106→  { name: 'Child Day Care', description: 'Supervised daytime childcare with learning activities and meals', category: 'Child Care' },
+   107→  { name: 'Special Needs Companion', description: 'Dedicated support for children with special needs and developmental activities', category: 'Specialized' },
+   108→  { name: 'Elderly Companion', description: 'Part-time companionship, walking assistance, and social engagement for seniors', category: 'Elder Care' },
+   109→  { name: 'Palliative Care Support', description: 'Compassionate end-of-life care with pain management and family emotional support', category: 'Medical' },
+   110→  { name: 'Medication Reminder Service', description: 'Timely medication administration and prescription management at home', category: 'Medical' },
+   111→  { name: 'Wound Care & Dressing', description: 'Professional wound cleaning, dressing change, and infection prevention', category: 'Medical' },
+   112→  { name: 'Bathing & Hygiene Assistance', description: 'Personal hygiene, grooming, and bathroom safety assistance for patients', category: 'Personal Care' },
+   113→  { name: 'Meal Preparation & Diet', description: 'Nutritious meal planning, cooking, and feeding assistance as per dietary needs', category: 'Personal Care' },
+   114→  { name: 'Doctor Appointment Escort', description: 'Accompany patient to hospital visits, manage records and follow-up instructions', category: 'Support' },
+   115→  { name: 'Lab Sample Collection', description: 'Home blood draw, sample collection, and delivery to diagnostic labs', category: 'Medical' },
+   116→] as const;
+   117→
+   118→interface SelectedService {
+   119→  name: string;
+   120→  description: string;
+   121→}
+   122→
+   123→type VerificationType = 'aadhaar' | 'police' | 'medical' | 'video';
+   124→type VerificationStatus = 'not_started' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'max_attempts_reached';
+   125→
+   126→interface VerificationDoc {
+   127→  id: string;
+   128→  type: VerificationType;
+   129→  status: VerificationStatus;
+   130→  attempts: Array<{
+   131→    attemptNumber: number;
+   132→    submittedAt: string;
+   133→    documents: Array<{ id: string; name: string; size: number; type: string }>;
+   134→    formFields: Record<string, string>;
+   135→    status: VerificationStatus;
+   136→    reviewedAt?: string;
+   137→  }>;
+   138→  currentDraft: { documents: Array<{ id: string; name: string; size: number; type: string }>; formFields: Record<string, string> };
+   139→}
+   140→
+   141→interface ProfileViewProps {
+   142→  onNavigate?: (view: string) => void;
+   143→}
+   144→
+   145→export default function ProfileView({ onNavigate }: ProfileViewProps) {
+   146→  const [isEditing, setIsEditing] = useState(false);
+   147→  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+   148→  const [editingSkills, setEditingSkills] = useState(false);
+   149→  const [selectedSkills, setSelectedSkills] = useState<SelectedSkill[]>(
+   150→    mockCarePartner.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   151→  );
+   152→  const [customSkillName, setCustomSkillName] = useState('');
+   153→  const [editingServices, setEditingServices] = useState(false);
+   154→  const [selectedServices, setSelectedServices] = useState<SelectedService[]>(
+   155→    mockCarePartner.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   156→  );
+   157→  const [customServiceName, setCustomServiceName] = useState('');
+   158→  const [customServiceDescription, setCustomServiceDescription] = useState('');
+   159→  const [profile, setProfile] = useState({
+   160→    name: mockCarePartner.name,
+   161→    email: mockCarePartner.email,
+   162→    phone: mockCarePartner.phone,
+   163→    experience: mockCarePartner.experience,
+   164→    qualifications: mockCarePartner.qualifications,
+   165→    languages: mockCarePartner.languages.join(', '),
+   166→    bio: mockCarePartner.bio,
+   167→  });
+   168→  const [availability, setAvailability] = useState(
+   169→    mockCarePartner.availability.map((a) => ({ ...a }))
+   170→  );
+   171→  const [isAvailable, setIsAvailable] = useState(mockCarePartner.isAvailable);
+   172→
+   173→  // Read verification docs from localStorage — must match VerificationPage's storage format
+   174→
+   175→  const getStoredVerificationDocs = (): VerificationDoc[] => {
+   176→    try {
+   177→      // Version check — if storage format is outdated, clear and start fresh
+   178→      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+   179→      if (storedVersion !== String(CURRENT_STORAGE_VERSION)) {
+   180→        localStorage.removeItem(VERIFICATION_STORAGE_KEY);
+   181→        localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_STORAGE_VERSION));
+   182→        // Fall through to fresh defaults
+   183→      } else {
+   184→        const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
+   185→        if (stored) {
+   186→          const parsed = JSON.parse(stored);
+   187→          if (Array.isArray(parsed) && parsed.length === 4) {
+   188→            return parsed;
+   189→          }
+   190→        }
+   191→      }
+   192→    } catch {
+   193→      // fall through
+   194→    }
+   195→    // Fresh defaults — all NOT started (no fake approved data)
+   196→    return [
+   197→      { id: 'v-aadhaar', type: 'aadhaar', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   198→      { id: 'v-police', type: 'police', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   199→      { id: 'v-medical', type: 'medical', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   200→      { id: 'v-video', type: 'video', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+   201→    ];
+   202→  };
+   203→
+   204→  const verificationDocs = useMemo(() => getStoredVerificationDocs(), []);
+   205→
+   206→  const initials = profile.name
+   207→    .split(' ')
+   208→    .map((n) => n[0])
+   209→    .join('')
+   210→    .toUpperCase();
+   211→
+   212→  const specialtyLabels: Record<string, string> = {
+   213→    elder_care: 'Elder Care',
+   214→    child_care: 'Child Care',
+   215→    office_care: 'Office Care',
+   216→    day_care: 'Day Care',
+   217→    live_in_care: 'Live-in Care',
+   218→    hourly_care: 'Hourly Care',
+   219→  };
+   220→  const specialtyLabel = specialtyLabels[mockCarePartner.specialty] || 'Care';
+   221→
+   222→  // Map verification docs to display items for the Verification Status card
+   223→  const verDisplay = [
+   224→    { title: 'Aadhaar Verification', type: 'aadhaar' as VerificationType, icon: Shield },
+   225→    { title: 'Police Verification', type: 'police' as VerificationType, icon: FileCheck },
+   226→    { title: 'Medical Fitness', type: 'medical' as VerificationType, icon: Heart },
+   227→    { title: 'Video Verification', type: 'video' as VerificationType, icon: UserCircle },
+   228→  ];
+   229→
+   230→  const allVerified = verificationDocs.every((d) => d.status === 'approved');
+   231→  const hasUnverified = verificationDocs.some((d) => d.status !== 'approved');
+   232→  const activeCount = verificationDocs.filter((d) => d.status === 'submitted' || d.status === 'under_review').length;
+   233→  const lockedCount = verificationDocs.filter((d) => d.status === 'max_attempts_reached').length;
+   234→
+   235→  // ─── Dynamic Stats (computed from shifts, reviews, profile) ──────────
+   236→  // Shifts Done = count of completed shifts
+   237→  const completedShifts = mockShifts.filter((s) => s.status === 'completed').length;
+   238→  // Active = in_progress shifts right now
+   239→  const activeAssignments = mockShifts.filter((s) => s.status === 'in_progress').length;
+   240→  // Repeat Clients = patients who appear in 2+ completed shifts
+   241→  const patientShiftCounts = new Map<string, number>();
+   242→  for (const shift of mockShifts) {
+   243→    if (shift.status === 'completed') {
+   244→      patientShiftCounts.set(shift.patientId, (patientShiftCounts.get(shift.patientId) || 0) + 1);
+   245→    }
+   246→  }
+   247→  const repeatClients = Array.from(patientShiftCounts.values()).filter((count) => count >= 2).length;
+   248→  // Rating = average from reviews
+   249→  const totalReviews = mockReviews.length;
+   250→  const ratingSum = mockReviews.reduce((acc, rv) => acc + rv.rating, 0);
+   251→  const averageRating = totalReviews > 0 ? ratingSum / totalReviews : 0;
+   252→  // Years Active = from profile experience
+   253→  const yearsActive = profile.experience;
+   254→
+   255→  const getStatusDisplay = (status: VerificationStatus) => {
+   256→    switch (status) {
+   257→      case 'approved':
+   258→        return { label: 'Verified', color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle };
+   259→      case 'submitted':
+   260→        return { label: 'Submitted', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Send };
+   261→      case 'under_review':
+   262→        return { label: 'Under Review', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock };
+   263→      case 'rejected':
+   264→        return { label: 'Rejected', color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200', icon: AlertCircle };
+   265→      case 'max_attempts_reached':
+   266→        return { label: 'Locked', color: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-300', icon: Ban };
+   267→      default:
+   268→        return { label: 'Not Verified', color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', icon: XCircle };
+   269→    }
+   270→  };
+   271→
+   272→  const handleSave = () => setIsEditing(false);
+   273→
+   274→  const handleCancel = () => {
+   275→    setProfile({
+   276→      name: mockCarePartner.name,
+   277→      email: mockCarePartner.email,
+   278→      phone: mockCarePartner.phone,
+   279→      experience: mockCarePartner.experience,
+   280→      qualifications: mockCarePartner.qualifications,
+   281→      languages: mockCarePartner.languages.join(', '),
+   282→      bio: mockCarePartner.bio,
+   283→    });
+   284→    setIsEditing(false);
+   285→  };
+   286→
+   287→  // ─── Skills Management ──────────────────────────────────────────────────
+   288→
+   289→  const isSkillSelected = (name: string) => selectedSkills.some((s) => s.name === name);
+   290→
+   291→  const toggleSkill = (name: string) => {
+   292→    setSelectedSkills((prev) => {
+   293→      if (prev.some((s) => s.name === name)) {
+   294→        return prev.filter((s) => s.name !== name);
+   295→      }
+   296→      return [...prev, { name, level: 'intermediate' as SkillLevel, years: 1 }];
+   297→    });
+   298→  };
+   299→
+   300→  const updateSkillLevel = (name: string, level: SkillLevel) => {
+   301→    setSelectedSkills((prev) =>
+   302→      prev.map((s) => (s.name === name ? { ...s, level } : s))
+   303→    );
+   304→  };
+   305→
+   306→  const updateSkillYears = (name: string, years: number) => {
+   307→    setSelectedSkills((prev) =>
+   308→      prev.map((s) => (s.name === name ? { ...s, years: Math.max(0, Math.min(50, years)) } : s))
+   309→    );
+   310→  };
+   311→
+   312→  const handleSaveSkills = () => {
+   313→    // In production this would save to backend
+   314→    setEditingSkills(false);
+   315→  };
+   316→
+   317→  const addCustomSkill = () => {
+   318→    const trimmed = customSkillName.trim();
+   319→    if (!trimmed || isSkillSelected(trimmed)) return;
+   320→    setSelectedSkills((prev) => [...prev, { name: trimmed, level: 'intermediate' as SkillLevel, years: 1 }]);
+   321→    setCustomSkillName('');
+   322→  };
+   323→
+   324→  const handleCancelSkills = () => {
+   325→    setSelectedSkills(
+   326→      mockCarePartner.specialistProfile?.skills?.map((s) => ({ name: s.name, level: s.level, years: s.years })) || []
+   327→    );
+   328→    setCustomSkillName('');
+   329→    setEditingSkills(false);
+   330→  };
+   331→
+   332→  // Group catalog skills by category (excluding already selected)
+   333→  const getCatalogByCategory = () => {
+   334→    const unselected = SKILLS_CATALOG.filter((s) => !isSkillSelected(s.name));
+   335→    const grouped: Record<string, typeof SKILLS_CATALOG[number][]> = {};
+   336→    for (const skill of unselected) {
+   337→      const cat = skill.category;
+   338→      if (!grouped[cat]) grouped[cat] = [];
+   339→      grouped[cat].push(skill);
+   340→    }
+   341→    return grouped;
+   342→  };
+   343→
+   344→  // ─── Services Management ─────────────────────────────────────────────────
+   345→
+   346→  const isServiceSelected = (name: string) => selectedServices.some((s) => s.name === name);
+   347→
+   348→  const toggleService = (name: string, description: string) => {
+   349→    setSelectedServices((prev) => {
+   350→      if (prev.some((s) => s.name === name)) {
+   351→        return prev.filter((s) => s.name !== name);
+   352→      }
+   353→      return [...prev, { name, description }];
+   354→    });
+   355→  };
+   356→
+   357→  const handleSaveServices = () => {
+   358→    setEditingServices(false);
+   359→  };
+   360→
+   361→  const addCustomService = () => {
+   362→    const name = customServiceName.trim();
+   363→    if (!name || isServiceSelected(name)) return;
+   364→    setSelectedServices((prev) => [...prev, { name, description: customServiceDescription.trim() || 'Custom service' }]);
+   365→    setCustomServiceName('');
+   366→    setCustomServiceDescription('');
+   367→  };
+   368→
+   369→  const handleCancelServices = () => {
+   370→    setSelectedServices(
+   371→      mockCarePartner.specialistProfile?.services?.map((s) => ({ name: s.name, description: s.description })) || []
+   372→    );
+   373→    setCustomServiceName('');
+   374→    setCustomServiceDescription('');
+   375→    setEditingServices(false);
+   376→  };
+   377→
+   378→  const getServicesCatalogByCategory = () => {
+   379→    const unselected = SERVICES_CATALOG.filter((s) => !isServiceSelected(s.name));
+   380→    const grouped: Record<string, typeof SERVICES_CATALOG[number][]> = {};
+   381→    for (const service of unselected) {
+   382→      const cat = service.category;
+   383→      if (!grouped[cat]) grouped[cat] = [];
+   384→      grouped[cat].push(service);
+   385→    }
+   386→    return grouped;
+   387→  };
+   388→
+   389→  const toggleDayAvailability = (index: number) => {
+   390→    setAvailability((prev) =>
+   391→      prev.map((day, i) => (i === index ? { ...day, isAvailable: !day.isAvailable } : day))
+   392→    );
+   393→  };
+   394→
+   395→  const handleOpenVerification = () => {
+   396→    if (onNavigate) {
+   397→      onNavigate('verification');
+   398→    }
+   399→  };
+   400→
+   401→  return (
+   402→    <div className="space-y-6 max-w-4xl mx-auto">
+   403→      {/* Section 1: Profile Header Card */}
+   404→      <Card>
+   405→        <CardContent className="p-6">
+   406→          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+   407→            <div className="flex items-center gap-4">
+   408→              <div className="relative">
+   409→                <div className="size-20 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-2xl font-bold flex items-center justify-center overflow-hidden">
+   410→                  {avatarUrl ? (
+   411→                    <img src={avatarUrl} alt="Profile" className="size-full object-cover" />
+   412→                  ) : (
+   413→                    initials
+   414→                  )}
+   415→                </div>
+   416→                {isEditing && (
+   417→                  <label className="absolute -bottom-1 -right-1 size-7 bg-white rounded-full border border-gray-200 flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+   418→                    <Camera className="size-3.5 text-gray-500" />
+   419→                    <input
+   420→                      type="file"
+   421→                      accept="image/*"
+   422→                      className="sr-only"
+   423→                      onChange={(e) => {
+   424→                        const file = e.target.files?.[0];
+   425→                        if (file) {
+   426→                          const reader = new FileReader();
+   427→                          reader.onload = (ev) => {
+   428→                            setAvatarUrl(ev.target?.result as string);
+   429→                          };
+   430→                          reader.readAsDataURL(file);
+   431→                        }
+   432→                      }}
+   433→                    />
+   434→                  </label>
+   435→                )}
+   436→              </div>
+   437→              <div className="space-y-1">
+   438→                <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
+   439→                <p className="text-xs font-mono text-gray-400">{mockCarePartner.carePartnerId}</p>
+   440→                <div className="flex flex-wrap items-center gap-2 pt-1">
+   441→                  <Badge className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 hover:bg-blue-100 border-0">
+   442→                    {specialtyLabel}
+   443→                  </Badge>
+   444→                  <div className="flex items-center gap-1">
+   445→                    <Star className="size-3.5 text-amber-400 fill-amber-400" />
+   446→                    <span className="text-sm font-medium text-gray-700">{averageRating.toFixed(1)}</span>
+   447→                    <span className="text-xs text-gray-500">({totalReviews} reviews)</span>
+   448→                  </div>
+   449→                </div>
+   450→                <div className="flex items-center gap-1.5 text-sm text-gray-500 pt-0.5">
+   451→                  <MapPin className="size-3.5" />
+   452→                  <span>{mockCarePartner.area}</span>
+   453→                </div>
+   454→              </div>
+   455→            </div>
+   456→            {!isEditing ? (
+   457→              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-2">
+   458→                <Edit3 className="size-4" />
+   459→                Edit Profile
+   460→              </Button>
+   461→            ) : (
+   462→              <div className="flex gap-2">
+   463→                <Button size="sm" onClick={handleSave} className="gap-2">
+   464→                  <Save className="size-4" />
+   465→                  Save
+   466→                </Button>
+   467→                <Button variant="outline" size="sm" onClick={handleCancel} className="gap-2">
+   468→                  <X className="size-4" />
+   469→                  Cancel
+   470→                </Button>
+   471→              </div>
+   472→            )}
+   473→          </div>
+   474→        </CardContent>
+   475→      </Card>
+   476→
+   477→      {/* Section 2: Personal Information Card */}
+   478→      <Card>
+   479→        <CardHeader className="pb-4">
+   480→          <div className="flex items-center justify-between">
+   481→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   482→              <Briefcase className="size-5 text-gray-400" />
+   483→              Personal Information
+   484→            </CardTitle>
+   485→            {!isEditing && (
+   486→              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)} className="gap-1.5 text-gray-500 hover:text-gray-700">
+   487→                <Edit3 className="size-3.5" />
+   488→                Edit
+   489→              </Button>
+   490→            )}
+   491→          </div>
+   492→        </CardHeader>
+   493→        <Separator />
+   494→        <CardContent className="p-6">
+   495→          {!isEditing ? (
+   496→            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   497→              {[
+   498→                { label: 'Full Name', value: profile.name },
+   499→                { label: 'Email', value: profile.email, icon: Mail },
+   500→                { label: 'Phone', value: profile.phone, icon: Phone },
+   501→                { label: 'Experience', value: `${profile.experience} years` },
+   502→                { label: 'Qualifications', value: profile.qualifications },
+   503→                { label: 'Languages', value: profile.languages, icon: Globe },
+   504→              ].map((item) => (
+   505→                <div key={item.label} className="space-y-1">
+   506→                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{item.label}</p>
+   507→                  <div className="flex items-center gap-1.5">
+   508→                    {'icon' in item && item.icon && <item.icon className="size-3.5 text-gray-400" />}
+   509→                    <p className="text-sm font-medium text-gray-900">{item.value}</p>
+   510→                  </div>
+   511→                </div>
+   512→              ))}
+   513→            </div>
+   514→          ) : (
+   515→            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+   516→              {[
+   517→                { id: 'edit-name', label: 'Full Name', value: profile.name, key: 'name' as const, type: 'text' },
+   518→                { id: 'edit-email', label: 'Email', value: profile.email, key: 'email' as const, type: 'email' },
+   519→                { id: 'edit-phone', label: 'Phone', value: profile.phone, key: 'phone' as const, type: 'tel' },
+   520→                { id: 'edit-experience', label: 'Experience (years)', value: profile.experience, key: 'experience' as const, type: 'number' },
+   521→              ].map((field) => (
+   522→                <div key={field.id} className="space-y-2">
+   523→                  <Label htmlFor={field.id} className="text-xs font-medium text-gray-500">{field.label}</Label>
+   524→                  <Input
+   525→                    id={field.id}
+   526→                    type={field.type}
+   527→                    value={field.value}
+   528→                    onChange={(e) =>
+   529→                      setProfile((p) => ({
+   530→                        ...p,
+   531→                        [field.key]: field.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value,
+   532→                      }))
+   533→                    }
+   534→                  />
+   535→                </div>
+   536→              ))}
+   537→              <div className="space-y-2 md:col-span-2">
+   538→                <Label htmlFor="edit-qualifications" className="text-xs font-medium text-gray-500">Qualifications</Label>
+   539→                <Input
+   540→                  id="edit-qualifications"
+   541→                  value={profile.qualifications}
+   542→                  onChange={(e) => setProfile((p) => ({ ...p, qualifications: e.target.value }))}
+   543→                />
+   544→              </div>
+   545→              <div className="space-y-2 md:col-span-2">
+   546→                <Label htmlFor="edit-languages" className="text-xs font-medium text-gray-500">Languages (comma-separated)</Label>
+   547→                <Input
+   548→                  id="edit-languages"
+   549→                  value={profile.languages}
+   550→                  onChange={(e) => setProfile((p) => ({ ...p, languages: e.target.value }))}
+   551→                  placeholder="English, Hindi, Punjabi"
+   552→                />
+   553→              </div>
+   554→            </div>
+   555→          )}
+   556→        </CardContent>
+   557→      </Card>
+   558→
+   559→      {/* Section 3: Specialist Profile Card */}
+   560→      {mockCarePartner.specialistProfile && (
+   561→        <Card>
+   562→          <CardHeader className="pb-4">
+   563→            <div className="flex items-center justify-between">
+   564→              <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+   565→                <Stethoscope className="size-5 text-gray-400" />
+   566→                {mockCarePartner.specialistProfile.title}
+   567→              </CardTitle>
+   568→              <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-full px-3 py-1 hover:from-blue-100 hover:to-indigo-100 border border-blue-200/60">
+   569→                <Sparkles className="size-3 mr-1" />
+   570→                {specialtyLabel}
+   571→              </Badge>
+   572→            </div>
+   573→          </CardHeader>
+   574→          <Separator />
+   575→          <CardContent className="p-6 space-y-6">
+   576→            {/* Tagline */}
+   577→            <p className="text-sm text-gray-600 leading-relaxed">{mockCarePartner.specialistProfile.tagline}</p>
+   578→
+   579→            {/* Stats Grid */}
+   580→            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+   581→              {[
+   582→                { label: 'Shifts Done', value: completedShifts.toLocaleString('en-IN'), icon: Activity, color: 'text-blue-600', bg: 'bg-blue-50' },
+   583→                { label: 'Active', value: activeAssignments, icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   584→                { label: 'Repeat Clients', value: repeatClients, icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50' },
+   585→                { label: 'Rating', value: averageRating.toFixed(1), icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
+   586→                { label: 'Reviews', value: totalReviews, icon: Award, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+   587→                { label: 'Years', value: yearsActive, icon: GraduationCap, color: 'text-teal-600', bg: 'bg-teal-50' },
+   588→              ].map((stat) => {
+   589→                const StatIcon = stat.icon;
+   590→                return (
+   591→                  <div key={stat.label} className="text-center rounded-xl border border-gray-100 bg-white p-3">
+   592→                    <div className={`size-8 rounded-lg ${stat.bg} flex items-center justify-center mx-auto mb-1.5`}>
+   593→                      <StatIcon className={`size-4 ${stat.color}`} />
+   594→                    </div>
+   595→                    <p className="text-base font-bold text-gray-900">{stat.value}</p>
+   596→                    <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{stat.label}</p>
+   597→                  </div>
+   598→                );
+   599→              })}
+   600→            </div>
+   601→
+   602→            {/* Skills */}
+   603→            <div>
+   604→              <div className="flex items-center justify-between mb-3">
+   605→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   606→                  <Sparkles className="size-4 text-gray-400" />
+   607→                  Core Skills & Expertise
+   608→                  {selectedSkills.length > 0 && (
+   609→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   610→                      {selectedSkills.length} selected
+   611→                    </Badge>
+   612→                  )}
+   613→                </h3>
+   614→                {!editingSkills ? (
+   615→                  <Button
+   616→                    variant="ghost"
+   617→                    size="sm"
+   618→                    onClick={() => setEditingSkills(true)}
+   619→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   620→                  >
+   621→                    <Pencil className="size-3" />
+   622→                    <span className="text-xs">Edit</span>
+   623→                  </Button>
+   624→                ) : (
+   625→                  <div className="flex items-center gap-1">
+   626→                    <Button
+   627→                      variant="ghost"
+   628→                      size="sm"
+   629→                      onClick={handleCancelSkills}
+   630→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   631→                    >
+   632→                      <span className="text-xs">Cancel</span>
+   633→                    </Button>
+   634→                    <Button
+   635→                      size="sm"
+   636→                      onClick={handleSaveSkills}
+   637→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   638→                    >
+   639→                      <Save className="size-3" />
+   640→                      Save
+   641→                    </Button>
+   642→                  </div>
+   643→                )}
+   644→              </div>
+   645→
+   646→              {!editingSkills ? (
+   647→                /* ─── View Mode: Skill badges ─── */
+   648→                <div className="flex flex-wrap gap-2">
+   649→                  {selectedSkills.length === 0 ? (
+   650→                    <p className="text-xs text-gray-400 italic">No skills added yet. Tap Edit to add your skills.</p>
+   651→                  ) : (
+   652→                    selectedSkills.map((skill) => {
+   653→                      const lvl = LEVEL_CONFIG[skill.level];
+   654→                      return (
+   655→                        <div
+   656→                          key={skill.name}
+   657→                          className={`inline-flex items-center gap-1.5 rounded-lg border ${lvl.border} ${lvl.bg} px-3 py-1.5 cursor-default`}
+   658→                        >
+   659→                          <BadgeCheck className={`size-3.5 ${lvl.color}`} />
+   660→                          <span className={`text-xs font-medium ${lvl.color}`}>{skill.name}</span>
+   661→                          <span className="text-[10px] text-gray-400 font-medium">{skill.years}y</span>
+   662→                        </div>
+   663→                      );
+   664→                    })
+   665→                  )}
+   666→                </div>
+   667→              ) : (
+   668→                /* ─── Edit Mode: Selected skills with level/years + catalog ─── */
+   669→                <div className="space-y-4">
+   670→                  {/* Already selected skills — editable cards */}
+   671→                  {selectedSkills.length > 0 && (
+   672→                    <div className="space-y-2">
+   673→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Skills</p>
+   674→                      {selectedSkills.map((skill) => {
+   675→                        const lvl = LEVEL_CONFIG[skill.level];
+   676→                        return (
+   677→                          <div
+   678→                            key={skill.name}
+   679→                            className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border ${lvl.border} ${lvl.bg} p-3`}
+   680→                          >
+   681→                            <div className="flex items-center gap-2 flex-1 min-w-0">
+   682→                              <BadgeCheck className={`size-4 ${lvl.color} shrink-0`} />
+   683→                              <span className="text-sm font-medium text-gray-900 truncate">{skill.name}</span>
+   684→                            </div>
+   685→                            <div className="flex items-center gap-2 shrink-0">
+   686→                              {/* Level dropdown */}
+   687→                              <div className="relative">
+   688→                                <select
+   689→                                  value={skill.level}
+   690→                                  onChange={(e) => updateSkillLevel(skill.name, e.target.value as SkillLevel)}
+   691→                                  className={`appearance-none rounded-lg border ${lvl.border} bg-white px-2.5 py-1.5 pr-7 text-xs font-medium ${lvl.color} cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500`}
+   692→                                >
+   693→                                  <option value="beginner">Beginner</option>
+   694→                                  <option value="intermediate">Intermediate</option>
+   695→                                  <option value="advanced">Advanced</option>
+   696→                                  <option value="expert">Expert</option>
+   697→                                </select>
+   698→                                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-3 pointer-events-none text-gray-400" />
+   699→                              </div>
+   700→                              {/* Years input */}
+   701→                              <div className="flex items-center gap-1">
+   702→                                <Input
+   703→                                  type="number"
+   704→                                  min={0}
+   705→                                  max={50}
+   706→                                  value={skill.years}
+   707→                                  onChange={(e) => updateSkillYears(skill.name, parseInt(e.target.value) || 0)}
+   708→                                  className="w-14 h-8 text-xs text-center rounded-lg border-gray-200"
+   709→                                />
+   710→                                <span className="text-[10px] text-gray-400 font-medium">yrs</span>
+   711→                              </div>
+   712→                              {/* Remove button */}
+   713→                              <button
+   714→                                type="button"
+   715→                                onClick={() => toggleSkill(skill.name)}
+   716→                                className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+   717→                              >
+   718→                                <Minus className="size-3.5" />
+   719→                              </button>
+   720→                            </div>
+   721→                          </div>
+   722→                        );
+   723→                      })}
+   724→                    </div>
+   725→                  )}
+   726→
+   727→                  {/* Add more skills from catalog */}
+   728→                  {(() => {
+   729→                    const catalog = getCatalogByCategory();
+   730→                    const hasCatalog = Object.keys(catalog).length > 0;
+   731→                    if (!hasCatalog) return null;
+   732→                    return (
+   733→                      <div className="space-y-2">
+   734→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Skills</p>
+   735→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   736→                          {Object.entries(catalog).map(([category, skills]) => (
+   737→                            <div key={category} className="mb-3 last:mb-0">
+   738→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   739→                              <div className="flex flex-wrap gap-1.5">
+   740→                                {skills.map((skill) => (
+   741→                                  <button
+   742→                                    key={skill.name}
+   743→                                    type="button"
+   744→                                    onClick={() => toggleSkill(skill.name)}
+   745→                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors active:scale-[0.97]"
+   746→                                  >
+   747→                                    <Plus className="size-3" />
+   748→                                    {skill.name}
+   749→                                  </button>
+   750→                                ))}
+   751→                              </div>
+   752→                            </div>
+   753→                          ))}
+   754→                        </div>
+   755→                      </div>
+   756→                    );
+   757→                  })()}
+   758→
+   759→                  {/* Add custom skill (Other) */}
+   760→                  <div className="space-y-2">
+   761→                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Other</p>
+   762→                    <div className="flex items-center gap-2">
+   763→                      <Input
+   764→                        type="text"
+   765→                        value={customSkillName}
+   766→                        onChange={(e) => setCustomSkillName(e.target.value)}
+   767→                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomSkill(); } }}
+   768→                        placeholder="Type a custom skill name..."
+   769→                        className="flex-1 h-9 text-sm rounded-lg border-gray-200"
+   770→                      />
+   771→                      <Button
+   772→                        type="button"
+   773→                        variant="outline"
+   774→                        size="sm"
+   775→                        onClick={addCustomSkill}
+   776→                        disabled={!customSkillName.trim() || isSkillSelected(customSkillName.trim())}
+   777→                        className="gap-1.5 h-9 px-3 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+   778→                      >
+   779→                        <Plus className="size-3.5" />
+   780→                        <span className="text-xs">Add</span>
+   781→                      </Button>
+   782→                    </div>
+   783→                    {customSkillName.trim() && isSkillSelected(customSkillName.trim()) && (
+   784→                      <p className="text-[10px] text-amber-600">This skill is already in your list.</p>
+   785→                    )}
+   786→                  </div>
+   787→                </div>
+   788→              )}
+   789→            </div>
+   790→
+   791→            {/* Services Offered */}
+   792→            <div>
+   793→              <div className="flex items-center justify-between mb-3">
+   794→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   795→                  <IndianRupee className="size-4 text-gray-400" />
+   796→                  Services Offered
+   797→                  {selectedServices.length > 0 && (
+   798→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   799→                      {selectedServices.length} active
+   800→                    </Badge>
+   801→                  )}
+   802→                </h3>
+   803→                {!editingServices ? (
+   804→                  <Button
+   805→                    variant="ghost"
+   806→                    size="sm"
+   807→                    onClick={() => setEditingServices(true)}
+   808→                    className="gap-1.5 text-gray-500 hover:text-blue-600 h-7 px-2"
+   809→                  >
+   810→                    <Pencil className="size-3" />
+   811→                    <span className="text-xs">Edit</span>
+   812→                  </Button>
+   813→                ) : (
+   814→                  <div className="flex items-center gap-1">
+   815→                    <Button
+   816→                      variant="ghost"
+   817→                      size="sm"
+   818→                      onClick={handleCancelServices}
+   819→                      className="text-gray-500 hover:text-gray-700 h-7 px-2"
+   820→                    >
+   821→                      <span className="text-xs">Cancel</span>
+   822→                    </Button>
+   823→                    <Button
+   824→                      size="sm"
+   825→                      onClick={handleSaveServices}
+   826→                      className="gap-1 h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+   827→                    >
+   828→                      <Save className="size-3" />
+   829→                      Save
+   830→                    </Button>
+   831→                  </div>
+   832→                )}
+   833→              </div>
+   834→
+   835→              {!editingServices ? (
+   836→                /* ─── View Mode ─── */
+   837→                <div className="space-y-2">
+   838→                  {selectedServices.length === 0 ? (
+   839→                    <p className="text-xs text-gray-400 italic">No services added yet. Tap Edit to add services you offer.</p>
+   840→                  ) : (
+   841→                    selectedServices.map((service) => (
+   842→                      <div
+   843→                        key={service.name}
+   844→                        className="rounded-lg border border-gray-100 bg-white p-3 hover:border-gray-200 hover:shadow-sm transition-all"
+   845→                      >
+   846→                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   847→                        <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   848→                      </div>
+   849→                    ))
+   850→                  )}
+   851→                </div>
+   852→              ) : (
+   853→                /* ─── Edit Mode ─── */
+   854→                <div className="space-y-4">
+   855→                  {/* Selected services — removable cards */}
+   856→                  {selectedServices.length > 0 && (
+   857→                    <div className="space-y-2">
+   858→                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Your Services</p>
+   859→                      {selectedServices.map((service) => (
+   860→                        <div
+   861→                          key={service.name}
+   862→                          className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3"
+   863→                        >
+   864→                          <div className="flex-1 min-w-0">
+   865→                            <p className="text-sm font-medium text-gray-900">{service.name}</p>
+   866→                            <p className="text-xs text-gray-500 truncate">{service.description}</p>
+   867→                          </div>
+   868→                          <button
+   869→                            type="button"
+   870→                            onClick={() => toggleService(service.name, service.description)}
+   871→                            className="flex items-center justify-center size-7 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+   872→                          >
+   873→                            <Minus className="size-3.5" />
+   874→                          </button>
+   875→                        </div>
+   876→                      ))}
+   877→                    </div>
+   878→                  )}
+   879→
+   880→                  {/* Add more services from catalog */}
+   881→                  {(() => {
+   882→                    const catalog = getServicesCatalogByCategory();
+   883→                    const hasCatalog = Object.keys(catalog).length > 0;
+   884→                    if (!hasCatalog) return null;
+   885→                    return (
+   886→                      <div className="space-y-2">
+   887→                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add More Services</p>
+   888→                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3 max-h-60 overflow-y-auto">
+   889→                          {Object.entries(catalog).map(([category, services]) => (
+   890→                            <div key={category} className="mb-3 last:mb-0">
+   891→                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{category}</p>
+   892→                              <div className="flex flex-col gap-1.5">
+   893→                                {services.map((service) => (
+   894→                                  <button
+   895→                                    key={service.name}
+   896→                                    type="button"
+   897→                                    onClick={() => toggleService(service.name, service.description)}
+   898→                                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2.5 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors active:scale-[0.99]"
+   899→                                  >
+   900→                                    <div className="size-6 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
+   901→                                      <Plus className="size-3 text-blue-500" />
+   902→                                    </div>
+   903→                                    <div className="flex-1 min-w-0">
+   904→                                      <p className="text-xs font-medium text-gray-700">{service.name}</p>
+   905→                                      <p className="text-[10px] text-gray-400 truncate">{service.description}</p>
+   906→                                    </div>
+   907→                                  </button>
+   908→                                ))}
+   909→                              </div>
+   910→                            </div>
+   911→                          ))}
+   912→                        </div>
+   913→                      </div>
+   914→                    );
+   915→                  })()}
+   916→
+   917→                  {/* Add custom service (Other) */}
+   918→                  <div className="space-y-2">
+   919→                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Other</p>
+   920→                    <div className="space-y-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-3">
+   921→                      <div className="flex items-center gap-2">
+   922→                        <Input
+   923→                          type="text"
+   924→                          value={customServiceName}
+   925→                          onChange={(e) => setCustomServiceName(e.target.value)}
+   926→                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+   927→                          placeholder="Service name..."
+   928→                          className="flex-1 h-9 text-sm rounded-lg border-gray-200"
+   929→                        />
+   930→                      </div>
+   931→                      <Input
+   932→                        type="text"
+   933→                        value={customServiceDescription}
+   934→                        onChange={(e) => setCustomServiceDescription(e.target.value)}
+   935→                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+   936→                        placeholder="Short description (optional)..."
+   937→                        className="h-9 text-sm rounded-lg border-gray-200"
+   938→                      />
+   939→                      <div className="flex items-center justify-between">
+   940→                        {customServiceName.trim() && isServiceSelected(customServiceName.trim()) && (
+   941→                          <p className="text-[10px] text-amber-600">This service is already in your list.</p>
+   942→                        )}
+   943→                        <div className="ml-auto">
+   944→                          <Button
+   945→                            type="button"
+   946→                            variant="outline"
+   947→                            size="sm"
+   948→                            onClick={addCustomService}
+   949→                            disabled={!customServiceName.trim() || isServiceSelected(customServiceName.trim())}
+   950→                            className="gap-1.5 h-8 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+   951→                          >
+   952→                            <Plus className="size-3.5" />
+   953→                            <span className="text-xs">Add Service</span>
+   954→                          </Button>
+   955→                        </div>
+   956→                      </div>
+   957→                    </div>
+   958→                  </div>
+   959→                </div>
+   960→              )}
+   961→            </div>
+   962→
+   963→            {/* Reviews & Ratings */}
+   964→            <div>
+   965→              <div className="flex items-center justify-between mb-3">
+   966→                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   967→                  <MessageSquare className="size-4 text-gray-400" />
+   968→                  Reviews & Ratings
+   969→                  {totalReviews > 0 && (
+   970→                    <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50 px-1.5 py-0">
+   971→                      {totalReviews} reviews
+   972→                    </Badge>
+   973→                  )}
+   974→                </h3>
+   975→                {totalReviews > 0 && (
+   976→                  <div className="flex items-center gap-1">
+   977→                    <Star className="size-3.5 text-amber-400 fill-amber-400" />
+   978→                    <span className="text-sm font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
+   979→                    <span className="text-[10px] text-gray-400">/ 5</span>
+   980→                  </div>
+   981→                )}
+   982→              </div>
+   983→
+   984→              {totalReviews === 0 ? (
+   985→                <p className="text-xs text-gray-400 italic">No reviews yet. Reviews from customers will appear here.</p>
+   986→              ) : (
+   987→                <div className="space-y-2.5">
+   988→                  {mockReviews
+   989→                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+   990→                    .map((review) => (
+   991→                      <div
+   992→                        key={review.id}
+   993→                        className="rounded-lg border border-gray-100 bg-white p-3 hover:border-gray-200 hover:shadow-sm transition-all"
+   994→                      >
+   995→                        <div className="flex items-start justify-between gap-2 mb-1.5">
+   996→                          <div className="flex items-center gap-2">
+   997→                            <div className="size-7 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700 text-[10px] font-bold flex items-center justify-center">
+   998→                              {review.patientName.split(' ').map((n) => n[0]).join('')}
+   999→                            </div>
+  1000→                            <div>
+  1001→                              <p className="text-xs font-semibold text-gray-900">{review.patientName}</p>
+  1002→                              {review.serviceType && (
+  1003→                                <p className="text-[10px] text-gray-400">{review.serviceType}</p>
+  1004→                              )}
+  1005→                            </div>
+  1006→                          </div>
+  1007→                          <div className="flex items-center gap-1 shrink-0">
+  1008→                            {Array.from({ length: 5 }).map((_, i) => (
+  1009→                              <Star
+  1010→                                key={i}
+  1011→                                className={`size-3 ${i < review.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`}
+  1012→                              />
+  1013→                            ))}
+  1014→                          </div>
+  1015→                        </div>
+  1016→                        <p className="text-xs text-gray-600 leading-relaxed">{review.comment}</p>
+  1017→                        <p className="text-[10px] text-gray-400 mt-1.5">
+  1018→                          {new Date(review.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1019→                        </p>
+  1020→                      </div>
+  1021→                    ))}
+  1022→                </div>
+  1023→              )}
+  1024→            </div>
+  1025→
+  1026→            {/* Certifications */}
+  1027→            <div>
+  1028→              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+  1029→                <GraduationCap className="size-4 text-gray-400" />
+  1030→                Certifications & Training
+  1031→              </h3>
+  1032→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1033→                {mockCarePartner.specialistProfile.certifications.map((cert) => (
+  1034→                  <div
+  1035→                    key={cert.name}
+  1036→                    className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3"
+  1037→                  >
+  1038→                    <div className="size-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+  1039→                      <BadgeCheck className="size-4 text-emerald-600" />
+  1040→                    </div>
+  1041→                    <div className="min-w-0">
+  1042→                      <p className="text-xs font-semibold text-gray-900">{cert.name}</p>
+  1043→                      <p className="text-[11px] text-gray-500">{cert.issuer}</p>
+  1044→                      <p className="text-[10px] text-gray-400 mt-0.5">{cert.year}</p>
+  1045→                    </div>
+  1046→                  </div>
+  1047→                ))}
+  1048→              </div>
+  1049→            </div>
+  1050→          </CardContent>
+  1051→        </Card>
+  1052→      )}
+  1053→
+  1054→      {/* Section 4: Availability Card */}
+  1055→      <Card>
+  1056→        <CardHeader className="pb-4">
+  1057→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1058→            <Clock className="size-5 text-gray-400" />
+  1059→            Weekly Availability
+  1060→          </CardTitle>
+  1061→        </CardHeader>
+  1062→        <Separator />
+  1063→        <CardContent className="p-6">
+  1064→          <div className="flex items-center justify-between mb-5">
+  1065→            <div>
+  1066→              <p className="text-sm font-medium text-gray-900">I am available for assignments</p>
+  1067→              <p className="text-xs text-gray-500 mt-0.5">
+  1068→                {isAvailable ? 'You will receive new assignment notifications' : 'You will not receive new assignments'}
+  1069→              </p>
+  1070→            </div>
+  1071→            <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
+  1072→          </div>
+  1073→          <div className="space-y-2">
+  1074→            {availability.map((day, index) => (
+  1075→              <div
+  1076→                key={day.day}
+  1077→                className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 transition-colors ${
+  1078→                  day.isAvailable ? 'bg-blue-50/50' : 'bg-white'
+  1079→                }`}
+  1080→              >
+  1081→                <div className="flex items-center gap-3">
+  1082→                  <span className={`text-sm font-medium ${day.isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>{day.day}</span>
+  1083→                  {day.isAvailable && <span className="text-xs text-gray-500">{day.startTime} - {day.endTime}</span>}
+  1084→                </div>
+  1085→                <Switch checked={day.isAvailable} onCheckedChange={() => toggleDayAvailability(index)} />
+  1086→              </div>
+  1087→            ))}
+  1088→          </div>
+  1089→        </CardContent>
+  1090→      </Card>
+  1091→
+  1092→      {/* Section 5: Verification Status Card */}
+  1093→      <Card>
+  1094→        <CardHeader className="pb-4">
+  1095→          <div className="flex items-center justify-between">
+  1096→            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1097→              <Shield className="size-5 text-gray-400" />
+  1098→              Verification Status
+  1099→            </CardTitle>
+  1100→            <Badge
+  1101→              className={`rounded-full px-3 py-1 border ${
+  1102→                allVerified
+  1103→                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1104→                  : activeCount > 0
+  1105→                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+  1106→                    : lockedCount > 0
+  1107→                      ? 'bg-gray-100 text-gray-600 border-gray-300'
+  1108→                      : 'bg-amber-50 text-amber-700 border-amber-200'
+  1109→              }`}
+  1110→            >
+  1111→              {allVerified ? 'Fully Verified' : activeCount > 0 ? 'In Progress' : lockedCount > 0 ? 'Verification Locked' : verificationDocs.some(d => d.status === 'approved') ? 'Partially Verified' : 'Not Verified'}
+  1112→            </Badge>
+  1113→          </div>
+  1114→        </CardHeader>
+  1115→        <Separator />
+  1116→        <CardContent className="p-6">
+  1117→          {/* Table-like verification list with clear columns */}
+  1118→          <div className="space-y-2">
+  1119→            {/* Header row */}
+  1120→            <div className="hidden sm:grid sm:grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+  1121→              <span>Document</span>
+  1122→              <span className="text-center">Status</span>
+  1123→              <span className="text-center">Attempts</span>
+  1124→              <span className="text-center">Action</span>
+  1125→            </div>
+  1126→            {verDisplay.map((item) => {
+  1127→              const doc = verificationDocs.find((d) => d.type === item.type);
+  1128→              const status = getStatusDisplay(doc?.status || 'not_started');
+  1129→              const StatusIcon = status.icon;
+  1130→              const attemptsUsed = doc?.attempts?.length || 0;
+  1131→              const isLocked = doc?.status === 'max_attempts_reached';
+  1132→              const isApproved = doc?.status === 'approved';
+  1133→              const isActive = doc?.status === 'submitted' || doc?.status === 'under_review';
+  1134→              const needsUpload = doc?.status === 'not_started' || doc?.status === 'rejected';
+  1135→
+  1136→              return (
+  1137→                <div
+  1138→                  key={item.title}
+  1139→                  role="button"
+  1140→                  tabIndex={0}
+  1141→                  className={`rounded-xl border p-4 flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center gap-3 transition-all ${
+  1142→                    isApproved
+  1143→                      ? 'border-emerald-100 bg-emerald-50/30 hover:border-emerald-200 hover:shadow-sm cursor-pointer'
+  1144→                      : isActive
+  1145→                        ? 'border-blue-100 bg-blue-50/30 hover:border-blue-200 hover:shadow-sm cursor-pointer'
+  1146→                        : isLocked
+  1147→                          ? 'border-red-100 bg-red-50/20 opacity-70'
+  1148→                          : 'border-gray-100 bg-white hover:border-blue-200 hover:shadow-sm cursor-pointer'
+  1149→                  }`}
+  1150→                  onClick={handleOpenVerification}
+  1151→                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenVerification(); } }}
+  1152→                >
+  1153→                  {/* Column 1: Document name + icon */}
+  1154→                  <div className="flex items-center gap-3">
+  1155→                    <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${status.bg}`}>
+  1156→                      <item.icon className={`size-5 ${status.color}`} />
+  1157→                    </div>
+  1158→                    <div>
+  1159→                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
+  1160→                      <p className="text-[11px] text-gray-400 sm:hidden">
+  1161→                        <StatusIcon className={`size-3 inline mr-0.5 ${status.color}`} />
+  1162→                        {status.label}
+  1163→                      </p>
+  1164→                    </div>
+  1165→                  </div>
+  1166→
+  1167→                  {/* Column 2: Status badge */}
+  1168→                  <Badge
+  1169→                    variant="outline"
+  1170→                    className={`hidden sm:inline-flex text-[11px] px-2.5 py-0.5 ${
+  1171→                      isApproved
+  1172→                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1173→                        : isActive
+  1174→                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+  1175→                          : isLocked
+  1176→                            ? 'bg-red-50 text-red-600 border-red-200'
+  1177→                            : 'bg-amber-50 text-amber-700 border-amber-200'
+  1178→                    }`}
+  1179→                  >
+  1180→                    <StatusIcon className="size-3 mr-1" />
+  1181→                    {status.label}
+  1182→                  </Badge>
+  1183→
+  1184→                  {/* Column 3: Attempts dots */}
+  1185→                  <div className="hidden sm:flex items-center justify-center gap-1">
+  1186→                    {Array.from({ length: 3 }).map((_, i) => (
+  1187→                      <div
+  1188→                        key={i}
+  1189→                        className={`size-2.5 rounded-full border ${
+  1190→                          i < attemptsUsed
+  1191→                            ? doc?.attempts[i]?.status === 'rejected'
+  1192→                              ? 'bg-red-400 border-red-300'
+  1193→                              : doc?.attempts[i]?.status === 'approved'
+  1194→                                ? 'bg-emerald-400 border-emerald-300'
+  1195→                                : 'bg-blue-400 border-blue-300'
+  1196→                            : 'bg-white border-gray-200'
+  1197→                        }`}
+  1198→                      />
+  1199→                    ))}
+  1200→                    <span className={`text-[10px] ml-1 font-medium ${
+  1201→                      isLocked ? 'text-red-500' : 'text-gray-400'
+  1202→                    }`}>
+  1203→                      {attemptsUsed}/3
+  1204→                    </span>
+  1205→                  </div>
+  1206→
+  1207→                  {/* Column 4: Action button */}
+  1208→                  <div className="hidden sm:flex justify-center">
+  1209→                    {isApproved ? (
+  1210→                      <span className="text-[11px] text-emerald-600 font-medium">✓ Done</span>
+  1211→                    ) : isLocked ? (
+  1212→                      <span className="text-[11px] text-red-500 font-medium">🔒 Locked</span>
+  1213→                    ) : isActive ? (
+  1214→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
+  1215→                        <Loader2 className="size-3 animate-spin" />
+  1216→                        In Review
+  1217→                      </span>
+  1218→                    ) : (
+  1219→                      <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
+  1220→                        Upload
+  1221→                        <ArrowUpRight className="size-3" />
+  1222→                      </span>
+  1223→                    )}
+  1224→                  </div>
+  1225→                </div>
+  1226→              );
+  1227→            })}
+  1228→          </div>
+  1229→
+  1230→          {/* Action Buttons — always visible so users can view their verification details */}
+  1231→          <div className="mt-5 flex flex-col sm:flex-row justify-center gap-2">
+  1232→            <Button
+  1233→              onClick={handleOpenVerification}
+  1234→              className={`gap-2 ${hasUnverified ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+  1235→            >
+  1236→              <Shield className="size-4" />
+  1237→              {allVerified ? 'View Verifications' : hasUnverified ? 'Manage Verifications' : 'Track Submission Status'}
+  1238→            </Button>
+  1239→            {(activeCount > 0 || lockedCount > 0) && (
+  1240→              <Button variant="outline" className="gap-2" onClick={handleOpenVerification}>
+  1241→                <Clock className="size-4" />
+  1242→                Track Submission Status
+  1243→              </Button>
+  1244→            )}
+  1245→          </div>
+  1246→
+  1247→          {/* Tracking info for submitted docs */}
+  1248→          {activeCount > 0 && (
+  1249→            <div className="mt-4 rounded-xl bg-indigo-50 border border-indigo-100 p-3.5">
+  1250→              <div className="flex items-start gap-2.5">
+  1251→                <Send className="size-4 text-indigo-500 mt-0.5 shrink-0" />
+  1252→                <div>
+  1253→                  <p className="text-xs font-medium text-indigo-800">
+  1254→                    {activeCount} document{activeCount > 1 ? 's' : ''} submitted to Nurturee backend portal
+  1255→                  </p>
+  1256→                  <p className="text-xs text-indigo-600 mt-0.5">
+  1257→                    Our verification team will review within 24-48 hours. If rejected, you may re-upload (up to 3 attempts total per verification).
+  1258→                  </p>
+  1259→                </div>
+  1260→              </div>
+  1261→            </div>
+  1262→          )}
+  1263→
+  1264→          {/* Warning for locked verifications */}
+  1265→          {lockedCount > 0 && (
+  1266→            <div className="mt-3 rounded-xl bg-red-50 border border-red-100 p-3.5">
+  1267→              <div className="flex items-start gap-2.5">
+  1268→                <Ban className="size-4 text-red-500 mt-0.5 shrink-0" />
+  1269→                <div>
+  1270→                  <p className="text-xs font-medium text-red-800">
+  1271→                    {lockedCount} verification{lockedCount > 1 ? 's' : ''} permanently locked
+  1272→                  </p>
+  1273→                  <p className="text-xs text-red-600 mt-0.5">
+  1274→                    Maximum upload attempts reached. Please contact Nurturee support at{' '}
+  1275→                    <span className="font-medium">support@nurturee.com</span> for assistance.
+  1276→                  </p>
+  1277→                </div>
+  1278→              </div>
+  1279→            </div>
+  1280→          )}
+  1281→        </CardContent>
+  1282→      </Card>
+  1283→
+  1284→      {/* Section 6: About Card */}
+  1285→      <Card>
+  1286→        <CardHeader className="pb-4">
+  1287→          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+  1288→            <Award className="size-5 text-gray-400" />
+  1289→            About
+  1290→          </CardTitle>
+  1291→        </CardHeader>
+  1292→        <Separator />
+  1293→        <CardContent className="p-6">
+  1294→          {!isEditing ? (
+  1295→            <p className="text-sm text-gray-700 leading-relaxed">{profile.bio}</p>
+  1296→          ) : (
+  1297→            <div className="space-y-2">
+  1298→              <Label htmlFor="edit-bio" className="text-xs font-medium text-gray-500">Bio</Label>
+  1299→              <Textarea
+  1300→                id="edit-bio"
+  1301→                value={profile.bio}
+  1302→                onChange={(e) => setProfile((p) => ({ ...p, bio: e.target.value }))}
+  1303→                rows={4}
+  1304→                placeholder="Tell us about yourself and your care partner experience..."
+  1305→              />
+  1306→            </div>
+  1307→          )}
+  1308→        </CardContent>
+  1309→      </Card>
+  1310→
+  1311→      {/* Section 7: SOS Emergency Button */}
+  1312→      <div className="rounded-2xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-5">
+  1313→        <div className="flex items-start gap-4">
+  1314→          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-600 shadow-lg shadow-red-600/30">
+  1315→            <Siren className="size-6 text-white" />
+  1316→          </div>
+  1317→          <div className="flex-1 min-w-0">
+  1318→            <h3 className="text-base font-bold text-red-800 flex items-center gap-2">
+  1319→              SOS — Emergency Alert
+  1320→            </h3>
+  1321→            <p className="text-xs text-red-600 font-medium mt-0.5 leading-relaxed">
+  1322→              FOR EMERGENCY SITUATIONS ONLY
+  1323→            </p>
+  1324→            <p className="text-xs text-red-700/70 mt-1.5 leading-relaxed">
+  1325→              Press this button to immediately alert the Nurturee emergency response team and notify the patient's emergency contact. Use only when the patient's health or safety is at serious, immediate risk.
+  1326→            </p>
+  1327→            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+  1328→              <Button
+  1329→                size="sm"
+  1330→                className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20 gap-2"
+  1331→                onClick={() => {
+  1332→                  alert(
+  1333→                    'SOS EMERGENCY ALERT\n\n' +
+  1334→                    'This feature will connect you to:\n' +
+  1335→                    '• Nurturee Emergency Helpline\n' +
+  1336→                    '• Patient\'s Registered Emergency Contact\n\n' +
+  1337→                    'In a live emergency, also call:\n' +
+  1338→                    '• Ambulance: 108\n' +
+  1339→                    '• Emergency: 112'
+  1340→                  )
+  1341→                }}
+  1342→              >
+  1343→                <Siren className="size-4" />
+  1344→                Trigger SOS Alert
+  1345→              </Button>
+  1346→              <Button
+  1347→                variant="outline"
+  1348→                size="sm"
+  1349→                className="border-red-200 text-red-700 hover:bg-red-50 gap-2"
+  1350→                onClick={() => {
+  1351→                  window.open('tel:112', '_self')
+  1352→                }}
+  1353→              >
+  1354→                <PhoneCall className="size-4" />
+  1355→                Call Emergency 112
+  1356→              </Button>
+  1357→            </div>
+  1358→          </div>
+  1359→        </div>
+  1360→      </div>
+  1361→    </div>
+  1362→  );
+  1363→}
+  1364→

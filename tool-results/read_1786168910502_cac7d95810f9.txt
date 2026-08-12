@@ -1,0 +1,761 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo } from 'react';
+     4→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Separator } from '@/components/ui/separator';
+    11→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    12→import {
+    13→  Search,
+    14→  Users,
+    15→  UserPlus,
+    16→  Clock,
+    17→  MapPin,
+    18→  Phone,
+    19→  AlertTriangle,
+    20→  Heart,
+    21→  FileText,
+    22→  Save,
+    23→  X,
+    24→  Activity,
+    25→  HandHeart,
+    26→  GraduationCap,
+    27→} from 'lucide-react';
+    28→import { mockPatients, mockCareTasks } from '@/lib/caregiver-data';
+    29→import type { Patient } from '@/lib/caregiver-data';
+    30→
+    31→interface PatientsViewProps {
+    32→  onNavigate: (view: string) => void;
+    33→}
+    34→
+    35→const avatarColors = ['blue', 'violet', 'emerald', 'amber', 'rose', 'cyan'] as const;
+    36→
+    37→type AvatarColor = (typeof avatarColors)[number];
+    38→
+    39→const avatarColorMap: Record<AvatarColor, { bg: string; text: string }> = {
+    40→  blue: { bg: 'bg-blue-100', text: 'text-blue-700' },
+    41→  violet: { bg: 'bg-violet-100', text: 'text-violet-700' },
+    42→  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+    43→  amber: { bg: 'bg-amber-100', text: 'text-amber-700' },
+    44→  rose: { bg: 'bg-rose-100', text: 'text-rose-700' },
+    45→  cyan: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
+    46→};
+    47→
+    48→function getAvatarColor(name: string): AvatarColor {
+    49→  let hash = 0;
+    50→  for (let i = 0; i < name.length; i++) {
+    51→    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    52→  }
+    53→  return avatarColors[Math.abs(hash) % avatarColors.length];
+    54→}
+    55→
+    56→function getInitials(name: string): string {
+    57→  return name
+    58→    .split(' ')
+    59→    .map((part) => part[0])
+    60→    .join('')
+    61→    .toUpperCase()
+    62→    .slice(0, 2);
+    63→}
+    64→
+    65→function formatDate(dateStr: string): string {
+    66→  const date = new Date(dateStr);
+    67→  return date.toLocaleDateString('en-IN', {
+    68→    day: 'numeric',
+    69→    month: 'short',
+    70→    year: 'numeric',
+    71→  });
+    72→}
+    73→
+    74→const categoryIconMap: Record<string, string> = {
+    75→  medication: '💊',
+    76→  hygiene: '🧴',
+    77→  nutrition: '🍽️',
+    78→  exercise: '🏃',
+    79→  vitals: '❤️',
+    80→  school: '🏫',
+    81→  milestone: '👶',
+    82→  safety: '🛡️',
+    83→  engagement: '🧩',
+    84→  feeding: '🍼',
+    85→  sleep: '😴',
+    86→  physical_activity: '🚴',
+    87→  learning: '📖',
+    88→  child_housekeeping: '✨',
+    89→  other: '📋',
+    90→};
+    91→
+    92→function careTypeLabel(careType: Patient['careType']): string {
+    93→  switch (careType) {
+    94→    case 'elder_care':
+    95→      return 'Elder Care';
+    96→    case 'child_care':
+    97→      return 'Child Care';
+    98→    default:
+    99→      return careType;
+   100→  }
+   101→}
+   102→
+   103→function careTypeBadgeClasses(careType: Patient['careType']): string {
+   104→  if (careType === 'elder_care') {
+   105→    return 'bg-violet-100 text-violet-700 border-violet-200';
+   106→  }
+   107→  if (careType === 'child_care') {
+   108→    return 'bg-rose-100 text-rose-700 border-rose-200';
+   109→  }
+   110→  return 'bg-gray-100 text-gray-600 border-gray-200';
+   111→}
+   112→
+   113→function PatientCard({ patient, onClick }: { patient: Patient; onClick: () => void }) {
+   114→  const color = getAvatarColor(patient.name);
+   115→  const colorClasses = avatarColorMap[color];
+   116→
+   117→  return (
+   118→    <div
+   119→      onClick={onClick}
+   120→      className="rounded-xl border border-gray-100 bg-white p-4 hover:border-blue-200 hover:bg-blue-50/30 transition-all cursor-pointer"
+   121→    >
+   122→      {/* Top: Avatar + Name + Age/Gender + CareType badge */}
+   123→      <div className="flex items-start gap-3 mb-3">
+   124→        <div
+   125→          className={`size-12 rounded-full ${colorClasses.bg} flex items-center justify-center shrink-0`}
+   126→        >
+   127→          <span className={`text-sm font-semibold ${colorClasses.text}`}>
+   128→            {getInitials(patient.name)}
+   129→          </span>
+   130→        </div>
+   131→        <div className="min-w-0 flex-1">
+   132→          <div className="font-semibold text-gray-900 truncate">
+   133→            {patient.name}
+   134→          </div>
+   135→          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+   136→            <span className="text-xs text-gray-500">
+   137→              {patient.age} yrs
+   138→            </span>
+   139→            <Badge
+   140→              variant="secondary"
+   141→              className="text-[10px] px-1.5 py-0 h-4 bg-gray-100 text-gray-600"
+   142→            >
+   143→              {patient.gender}
+   144→            </Badge>
+   145→            <Badge
+   146→              variant="outline"
+   147→              className={`text-[10px] px-1.5 py-0 h-4 ${careTypeBadgeClasses(patient.careType)}`}
+   148→            >
+   149→              {careTypeLabel(patient.careType)}
+   150→            </Badge>
+   151→          </div>
+   152→        </div>
+   153→      </div>
+   154→
+   155→      {/* Middle: Phone, City, Last Session */}
+   156→      <div className="flex flex-col gap-1.5 mb-3">
+   157→        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+   158→          <Phone className="size-3 shrink-0" />
+   159→          <span className="truncate">{patient.phone}</span>
+   160→        </div>
+   161→        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+   162→          <MapPin className="size-3 shrink-0" />
+   163→          <span>{patient.city}</span>
+   164→        </div>
+   165→        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+   166→          <Clock className="size-3 shrink-0" />
+   167→          <span>Last session: {formatDate(patient.lastSession)}</span>
+   168→        </div>
+   169→      </div>
+   170→
+   171→      {/* Conditions (elder care) / School info (child care) */}
+   172→      {patient.careType === 'child_care' && patient.schoolName && (
+   173→        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+   174→          <GraduationCap className="size-3 shrink-0" />
+   175→          <span className="truncate">{patient.schoolName} • {patient.grade}</span>
+   176→        </div>
+   177→      )}
+   178→      {patient.careType !== 'child_care' && patient.conditions && patient.conditions.length > 0 && (
+   179→        <div className="flex flex-wrap gap-1 mb-3">
+   180→          {patient.conditions.map((condition) => (
+   181→            <span
+   182→              key={condition}
+   183→              className="rounded-full bg-blue-50 text-blue-700 text-[10px] px-2 py-0.5"
+   184→            >
+   185→              {condition}
+   186→            </span>
+   187→          ))}
+   188→        </div>
+   189→      )}
+   190→
+   191→      {/* Bottom: Sessions + View Details */}
+   192→      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+   193→        <span className="text-xs text-gray-500">
+   194→          {patient.totalSessions} sessions
+   195→        </span>
+   196→        <span className="text-sm text-blue-600 font-medium">
+   197→          View Details →
+   198→        </span>
+   199→      </div>
+   200→    </div>
+   201→  );
+   202→}
+   203→
+   204→export default function PatientsView({ onNavigate }: PatientsViewProps) {
+   205→  const [activeTab, setActiveTab] = useState<string>('all');
+   206→  const [searchQuery, setSearchQuery] = useState('');
+   207→  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+   208→  const [sheetOpen, setSheetOpen] = useState(false);
+   209→  const [editingNotes, setEditingNotes] = useState(false);
+   210→  const [careNotes, setCareNotes] = useState('');
+   211→
+   212→  const filteredPatients = useMemo(() => {
+   213→    let patients = mockPatients;
+   214→
+   215→    // Filter by tab
+   216→    if (activeTab === 'elder_care') {
+   217→      patients = patients.filter((p) => p.careType === 'elder_care');
+   218→    } else if (activeTab === 'child_care') {
+   219→      patients = patients.filter((p) => p.careType === 'child_care');
+   220→    }
+   221→
+   222→    // Filter by search
+   223→    if (searchQuery.trim()) {
+   224→      const q = searchQuery.toLowerCase();
+   225→      patients = patients.filter(
+   226→        (p) =>
+   227→          p.name.toLowerCase().includes(q) || p.phone.includes(q)
+   228→      );
+   229→    }
+   230→
+   231→    return patients;
+   232→  }, [searchQuery, activeTab]);
+   233→
+   234→  const elderCount = mockPatients.filter((p) => p.careType === 'elder_care').length;
+   235→  const childCount = mockPatients.filter((p) => p.careType === 'child_care').length;
+   236→  const newThisMonth = 2;
+   237→  const repeatPatients = mockPatients.filter((p) => p.totalSessions > 10).length;
+   238→
+   239→  function openPatientDetail(patient: Patient) {
+   240→    setSelectedPatient(patient);
+   241→    setCareNotes(patient.careNotes);
+   242→    setEditingNotes(false);
+   243→    setSheetOpen(true);
+   244→  }
+   245→
+   246→  function handleSaveNotes() {
+   247→    if (selectedPatient) {
+   248→      setSelectedPatient({ ...selectedPatient, careNotes });
+   249→    }
+   250→    setEditingNotes(false);
+   251→  }
+   252→
+   253→  function handleCancelEdit() {
+   254→    if (selectedPatient) {
+   255→      setCareNotes(selectedPatient.careNotes);
+   256→    }
+   257→    setEditingNotes(false);
+   258→  }
+   259→
+   260→  const patientTasks = selectedPatient
+   261→    ? mockCareTasks.find((ct) => ct.patientId === selectedPatient.id)
+   262→    : null;
+   263→
+   264→  const patientShifts = selectedPatient
+   265→    ? mockPatients.length > 0
+   266→      ? []
+   267→      : []
+   268→    : [];
+   269→
+   270→  // Render the patient cards grid (shared across tabs)
+   271→  function renderPatientCards(patients: Patient[]) {
+   272→    if (patients.length === 0) {
+   273→      return (
+   274→        <div className="flex flex-col items-center justify-center py-16 text-center">
+   275→          <div className="size-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+   276→            <Users className="size-8 text-gray-400" />
+   277→          </div>
+   278→          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+   279→            No care members found
+   280→          </h3>
+   281→          <p className="text-sm text-gray-500">
+   282→            Try a different search term or tab
+   283→          </p>
+   284→        </div>
+   285→      );
+   286→    }
+   287→
+   288→    return (
+   289→      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   290→        {patients.map((patient) => (
+   291→          <PatientCard
+   292→            key={patient.id}
+   293→            patient={patient}
+   294→            onClick={() => openPatientDetail(patient)}
+   295→          />
+   296→        ))}
+   297→      </div>
+   298→    );
+   299→  }
+   300→
+   301→  return (
+   302→    <div className="space-y-6">
+   303→      {/* Section 1: Stats Row */}
+   304→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   305→        <div className="bg-card rounded-xl border border-gray-100 shadow-sm py-4 px-4 flex items-center gap-3">
+   306→          <div className="size-10 rounded-xl bg-blue-50 flex items-center justify-center">
+   307→            <Users className="size-5 text-blue-600" />
+   308→          </div>
+   309→          <div>
+   310→            <div className="text-lg font-bold text-gray-900">
+   311→              {mockPatients.length}
+   312→            </div>
+   313→            <div className="text-xs text-gray-500">Total Care Members</div>
+   314→          </div>
+   315→        </div>
+   316→
+   317→        <div className="bg-card rounded-xl border border-gray-100 shadow-sm py-4 px-4 flex items-center gap-3">
+   318→          <div className="size-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+   319→            <UserPlus className="size-5 text-emerald-600" />
+   320→          </div>
+   321→          <div>
+   322→            <div className="text-lg font-bold text-gray-900">{newThisMonth}</div>
+   323→            <div className="text-xs text-gray-500">New This Month</div>
+   324→          </div>
+   325→        </div>
+   326→
+   327→        <div className="bg-card rounded-xl border border-gray-100 shadow-sm py-4 px-4 flex items-center gap-3">
+   328→          <div className="size-10 rounded-xl bg-violet-50 flex items-center justify-center">
+   329→            <Activity className="size-5 text-violet-600" />
+   330→          </div>
+   331→          <div>
+   332→            <div className="text-lg font-bold text-gray-900">{repeatPatients}</div>
+   333→            <div className="text-xs text-gray-500">Repeat Care Members</div>
+   334→          </div>
+   335→        </div>
+   336→      </div>
+   337→
+   338→      {/* Section 2: Category Tabs + Search */}
+   339→      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   340→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   341→          <TabsList className="h-auto p-1">
+   342→            <TabsTrigger value="all" className="gap-1.5 px-3 py-1.5 text-xs font-medium">
+   343→              All
+   344→              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-gray-200 text-gray-600 hover:bg-gray-200">
+   345→                {mockPatients.length}
+   346→              </Badge>
+   347→            </TabsTrigger>
+   348→            <TabsTrigger value="elder_care" className="gap-1.5 px-3 py-1.5 text-xs font-medium">
+   349→              <HandHeart className="size-3.5 text-violet-600" />
+   350→              Elder Care
+   351→              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-violet-100 text-violet-700 hover:bg-violet-100">
+   352→                {elderCount}
+   353→              </Badge>
+   354→            </TabsTrigger>
+   355→            <TabsTrigger value="child_care" className="gap-1.5 px-3 py-1.5 text-xs font-medium">
+   356→              <GraduationCap className="size-3.5 text-rose-600" />
+   357→              Child Care
+   358→              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 hover:bg-rose-100">
+   359→                {childCount}
+   360→              </Badge>
+   361→            </TabsTrigger>
+   362→          </TabsList>
+   363→        </Tabs>
+   364→
+   365→        <div className="relative flex-1 w-full sm:max-w-xs sm:ml-auto">
+   366→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+   367→          <Input
+   368→            placeholder="Search care members..."
+   369→            value={searchQuery}
+   370→            onChange={(e) => setSearchQuery(e.target.value)}
+   371→            className="pl-10 rounded-xl border-gray-200 bg-white h-9 text-sm"
+   372→          />
+   373→        </div>
+   374→      </div>
+   375→
+   376→      {/* Section 3: Patient Cards Grid (rendered based on active tab) */}
+   377→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   378→        <TabsContent value="all">
+   379→          {renderPatientCards(
+   380→            filteredPatients.filter((p) => true)
+   381→          )}
+   382→        </TabsContent>
+   383→        <TabsContent value="elder_care">
+   384→          {renderPatientCards(
+   385→            filteredPatients.filter((p) => p.careType === 'elder_care')
+   386→          )}
+   387→        </TabsContent>
+   388→        <TabsContent value="child_care">
+   389→          {renderPatientCards(
+   390→            filteredPatients.filter((p) => p.careType === 'child_care')
+   391→          )}
+   392→        </TabsContent>
+   393→      </Tabs>
+   394→
+   395→      {/* Patient Detail Sheet */}
+   396→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+   397→        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+   398→          {selectedPatient && (
+   399→            <>
+   400→              <SheetHeader className="flex flex-row items-center justify-between pr-6">
+   401→                <SheetTitle className="text-xl font-bold text-gray-900">
+   402→                  {selectedPatient.name}
+   403→                </SheetTitle>
+   404→                <Button
+   405→                  variant="ghost"
+   406→                  size="icon"
+   407→                  className="size-8 shrink-0"
+   408→                  onClick={() => setSheetOpen(false)}
+   409→                >
+   410→                  <X className="size-4" />
+   411→                </Button>
+   412→              </SheetHeader>
+   413→
+   414→              <div className="mt-6 space-y-6 pb-8">
+   415→                {/* 1. Basic Info */}
+   416→                <section>
+   417→                  <div className="flex items-center gap-4 mb-4">
+   418→                    {(() => {
+   419→                      const color = getAvatarColor(selectedPatient.name);
+   420→                      const cc = avatarColorMap[color];
+   421→                      return (
+   422→                        <div
+   423→                          className={`size-16 rounded-full ${cc.bg} flex items-center justify-center shrink-0`}
+   424→                        >
+   425→                          <span
+   426→                            className={`text-xl font-bold ${cc.text}`}
+   427→                          >
+   428→                            {getInitials(selectedPatient.name)}
+   429→                          </span>
+   430→                        </div>
+   431→                      );
+   432→                    })()}
+   433→                    <div>
+   434→                      <h3 className="text-lg font-bold text-gray-900">
+   435→                        {selectedPatient.name}
+   436→                      </h3>
+   437→                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+   438→                        <span className="text-sm text-gray-600">
+   439→                          {selectedPatient.age} years
+   440→                        </span>
+   441→                        <Badge
+   442→                          variant="secondary"
+   443→                          className="text-xs px-2 py-0 h-5 bg-gray-100 text-gray-600"
+   444→                        >
+   445→                          {selectedPatient.gender}
+   446→                        </Badge>
+   447→                        <Badge
+   448→                          variant="outline"
+   449→                          className={`text-xs px-2 py-0 h-5 ${careTypeBadgeClasses(selectedPatient.careType)}`}
+   450→                        >
+   451→                          {careTypeLabel(selectedPatient.careType)}
+   452→                        </Badge>
+   453→                      </div>
+   454→                    </div>
+   455→                  </div>
+   456→
+   457→                  <div className="space-y-3">
+   458→                    <div className="flex items-center gap-3 text-sm">
+   459→                      <Phone className="size-4 text-gray-400" />
+   460→                      <span className="text-gray-700">
+   461→                        {selectedPatient.phone}
+   462→                      </span>
+   463→                    </div>
+   464→                    <div className="flex items-center gap-3 text-sm">
+   465→                      <MapPin className="size-4 text-gray-400" />
+   466→                      <span className="text-gray-700">
+   467→                        {selectedPatient.address || selectedPatient.city}
+   468→                      </span>
+   469→                    </div>
+   470→                    {selectedPatient.bloodGroup && (
+   471→                      <div className="flex items-center gap-3 text-sm">
+   472→                        <Heart className="size-4 text-gray-400" />
+   473→                        <span className="text-gray-700">
+   474→                          Blood Group: {selectedPatient.bloodGroup}
+   475→                        </span>
+   476→                      </div>
+   477→                    )}
+   478→                    {selectedPatient.allergies && (
+   479→                      <div className="flex items-center gap-3 text-sm">
+   480→                        <AlertTriangle className="size-4 text-amber-500" />
+   481→                        <span className="text-amber-700 font-medium">
+   482→                          Allergy: {selectedPatient.allergies}
+   483→                        </span>
+   484→                      </div>
+   485→                    )}
+   486→                  </div>
+   487→                </section>
+   488→
+   489→                <Separator />
+   490→
+   491→                {/* 2. Medical History (elder care) / School Info (child care) */}
+   492→                <section>
+   493→                  <Card className="border-gray-100">
+   494→                    <CardHeader className="pb-3">
+   495→                      <CardTitle className="flex items-center gap-2 text-base">
+   496→                        {selectedPatient.careType === 'child_care' ? (
+   497→                          <>
+   498→                            <GraduationCap className="size-4 text-gray-500" />
+   499→                            School Information
+   500→                          </>
+   501→                        ) : (
+   502→                          <>
+   503→                            <FileText className="size-4 text-gray-500" />
+   504→                            Medical History
+   505→                          </>
+   506→                        )}
+   507→                      </CardTitle>
+   508→                    </CardHeader>
+   509→                    <CardContent>
+   510→                      {selectedPatient.careType === 'child_care' ? (
+   511→                        <div className="space-y-3">
+   512→                          <div className="flex items-center gap-3 text-sm">
+   513→                            <GraduationCap className="size-4 text-rose-500" />
+   514→                            <div>
+   515→                              <div className="text-gray-500 text-xs">School</div>
+   516→                              <div className="text-gray-900 font-medium">
+   517→                                {selectedPatient.schoolName || 'Not specified'}
+   518→                              </div>
+   519→                            </div>
+   520→                          </div>
+   521→                          <div className="flex items-center gap-3 text-sm">
+   522→                            <FileText className="size-4 text-rose-500" />
+   523→                            <div>
+   524→                              <div className="text-gray-500 text-xs">Grade</div>
+   525→                              <div className="text-gray-900 font-medium">
+   526→                                {selectedPatient.grade || 'Not specified'}
+   527→                              </div>
+   528→                            </div>
+   529→                          </div>
+   530→                          {selectedPatient.allergies && (
+   531→                            <div className="flex items-center gap-3 text-sm">
+   532→                              <AlertTriangle className="size-4 text-amber-500" />
+   533→                              <div>
+   534→                                <div className="text-gray-500 text-xs">Allergies</div>
+   535→                                <div className="text-amber-700 font-medium">
+   536→                                  {selectedPatient.allergies}
+   537→                                </div>
+   538→                              </div>
+   539→                            </div>
+   540→                          )}
+   541→                        </div>
+   542→                      ) : (
+   543→                        <>
+   544→                          {selectedPatient.conditions &&
+   545→                          selectedPatient.conditions.length > 0 ? (
+   546→                            <div className="space-y-3">
+   547→                              <div className="flex flex-wrap gap-2">
+   548→                                {selectedPatient.conditions.map((condition) => (
+   549→                                  <Badge
+   550→                                    key={condition}
+   551→                                    variant="outline"
+   552→                                    className="text-xs border-blue-200 bg-blue-50 text-blue-700"
+   553→                                  >
+   554→                                    {condition}
+   555→                                  </Badge>
+   556→                                ))}
+   557→                              </div>
+   558→                              <p className="text-sm text-gray-600 leading-relaxed">
+   559→                                {selectedPatient.medicalHistory}
+   560→                              </p>
+   561→                            </div>
+   562→                          ) : (
+   563→                            <p className="text-sm text-gray-600 leading-relaxed">
+   564→                              {selectedPatient.medicalHistory || 'No medical history recorded.'}
+   565→                            </p>
+   566→                          )}
+   567→                          {selectedPatient.primaryDoctor && (
+   568→                            <div className="mt-3 flex items-center gap-3 text-sm">
+   569→                              <Heart className="size-4 text-violet-500" />
+   570→                              <span className="text-gray-700">
+   571→                                Primary Doctor: {selectedPatient.primaryDoctor}
+   572→                              </span>
+   573→                            </div>
+   574→                          )}
+   575→                          {selectedPatient.emergencyContact && (
+   576→                            <div className="mt-2 flex items-center gap-3 text-sm">
+   577→                              <Phone className="size-4 text-red-500" />
+   578→                              <span className="text-gray-700">
+   579→                                Emergency: {selectedPatient.emergencyContact}
+   580→                              </span>
+   581→                            </div>
+   582→                          )}
+   583→                        </>
+   584→                      )}
+   585→                    </CardContent>
+   586→                  </Card>
+   587→                </section>
+   588→
+   589→                {/* 3. Care Notes */}
+   590→                <section>
+   591→                  <div className="flex items-center justify-between mb-3">
+   592→                    <h3 className="text-base font-semibold text-gray-900">
+   593→                      Care Notes
+   594→                    </h3>
+   595→                    {!editingNotes && (
+   596→                      <Button
+   597→                        variant="outline"
+   598→                        size="sm"
+   599→                        className="text-xs h-7"
+   600→                        onClick={() => setEditingNotes(true)}
+   601→                      >
+   602→                        Edit
+   603→                      </Button>
+   604→                    )}
+   605→                  </div>
+   606→
+   607→                  {editingNotes ? (
+   608→                    <div className="space-y-3">
+   609→                      <Textarea
+   610→                        value={careNotes}
+   611→                        onChange={(e) => setCareNotes(e.target.value)}
+   612→                        className="min-h-[100px] w-full rounded-lg border border-gray-200 p-3 text-sm"
+   613→                      />
+   614→                      <div className="flex items-center gap-2 justify-end">
+   615→                        <Button
+   616→                          variant="outline"
+   617→                          size="sm"
+   618→                          className="text-xs h-7"
+   619→                          onClick={handleCancelEdit}
+   620→                        >
+   621→                          <X className="size-3 mr-1" />
+   622→                          Cancel
+   623→                        </Button>
+   624→                        <Button
+   625→                          size="sm"
+   626→                          className="text-xs h-7"
+   627→                          onClick={handleSaveNotes}
+   628→                        >
+   629→                          <Save className="size-3 mr-1" />
+   630→                          Save
+   631→                        </Button>
+   632→                      </div>
+   633→                    </div>
+   634→                  ) : (
+   635→                    <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+   636→                      <p className="text-sm text-gray-700 leading-relaxed">
+   637→                        {careNotes || 'No care notes added yet.'}
+   638→                      </p>
+   639→                    </div>
+   640→                  )}
+   641→                </section>
+   642→
+   643→                <Separator />
+   644→
+   645→                {/* 4. Visit History */}
+   646→                <section>
+   647→                  <h3 className="text-base font-semibold text-gray-900 mb-3">
+   648→                    Session History
+   649→                  </h3>
+   650→                  <div className="space-y-2">
+   651→                    <div className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3">
+   652→                      <div className="size-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 mt-0.5">
+   653→                        <Clock className="size-4 text-blue-600" />
+   654→                      </div>
+   655→                      <div className="flex-1 min-w-0">
+   656→                        <div className="flex items-center justify-between">
+   657→                          <span className="text-sm font-medium text-gray-900">
+   658→                            {formatDate(selectedPatient.lastSession)}
+   659→                          </span>
+   660→                          <Badge
+   661→                            variant="secondary"
+   662→                            className="text-[10px] h-4 px-1.5 bg-emerald-50 text-emerald-700"
+   663→                          >
+   664→                            Completed
+   665→                          </Badge>
+   666→                        </div>
+   667→                        <p className="text-xs text-gray-500 mt-0.5">
+   668→                          {selectedPatient.careType === 'child_care'
+   669→                            ? 'After-school care session. Homework help and recreational activities completed.'
+   670→                            : 'Routine check-up and medication review. Patient stable.'}
+   671→                        </p>
+   672→                      </div>
+   673→                    </div>
+   674→                    <div className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3">
+   675→                      <div className="size-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
+   676→                        <Clock className="size-4 text-gray-400" />
+   677→                      </div>
+   678→                      <div className="flex-1 min-w-0">
+   679→                        <div className="flex items-center justify-between">
+   680→                          <span className="text-sm font-medium text-gray-900">
+   681→                            {(() => {
+   682→                              const prevDate = new Date(selectedPatient.lastSession);
+   683→                              prevDate.setDate(prevDate.getDate() - 3);
+   684→                              return formatDate(prevDate.toISOString());
+   685→                            })()}
+   686→                          </span>
+   687→                          <Badge
+   688→                            variant="secondary"
+   689→                            className="text-[10px] h-4 px-1.5 bg-emerald-50 text-emerald-700"
+   690→                          >
+   691→                            Completed
+   692→                          </Badge>
+   693→                        </div>
+   694→                        <p className="text-xs text-gray-500 mt-0.5">
+   695→                          {selectedPatient.careType === 'child_care'
+   696→                            ? 'Full-day care. Art activities, outdoor play, and lunch provided.'
+   697→                            : 'Follow-up visit. Wound dressing and vitals monitoring.'}
+   698→                        </p>
+   699→                      </div>
+   700→                    </div>
+   701→                  </div>
+   702→                  <p className="text-xs text-gray-400 mt-2 text-center">
+   703→                    Total {selectedPatient.totalSessions} sessions
+   704→                  </p>
+   705→                </section>
+   706→
+   707→                <Separator />
+   708→
+   709→                {/* 5. Today's Tasks */}
+   710→                {patientTasks && patientTasks.tasks.length > 0 && (
+   711→                  <section>
+   712→                    <h3 className="text-base font-semibold text-gray-900 mb-3">
+   713→                      Today's Tasks
+   714→                    </h3>
+   715→                    <div className="space-y-2">
+   716→                      {patientTasks.tasks.map((task) => (
+   717→                        <label
+   718→                          key={task.id}
+   719→                          className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+   720→                        >
+   721→                          <input
+   722→                            type="checkbox"
+   723→                            checked={task.isCompleted}
+   724→                            readOnly
+   725→                            className="mt-0.5 size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+   726→                          />
+   727→                          <div className="flex-1 min-w-0">
+   728→                            <div className="flex items-center gap-2">
+   729→                              <span
+   730→                                className={`text-sm ${task.isCompleted ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}`}
+   731→                              >
+   732→                                {categoryIconMap[task.category] || '📋'}{' '}
+   733→                                {task.title}
+   734→                              </span>
+   735→                            </div>
+   736→                            <p className="text-xs text-gray-500 mt-0.5">
+   737→                              {task.scheduledTime}
+   738→                            </p>
+   739→                          </div>
+   740→                          {task.isCompleted && (
+   741→                            <Badge
+   742→                              variant="secondary"
+   743→                              className="text-[10px] h-4 px-1.5 bg-emerald-50 text-emerald-700 shrink-0"
+   744→                            >
+   745→                              Done
+   746→                            </Badge>
+   747→                          )}
+   748→                        </label>
+   749→                      ))}
+   750→                    </div>
+   751→                  </section>
+   752→                )}
+   753→              </div>
+   754→            </>
+   755→          )}
+   756→        </SheetContent>
+   757→      </Sheet>
+   758→    </div>
+   759→  );
+   760→}
+   761→

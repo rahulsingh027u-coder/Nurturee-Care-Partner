@@ -1,0 +1,914 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardHeader,
+     7→  CardTitle,
+     8→  CardContent,
+     9→} from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    13→import {
+    14→  Wallet,
+    15→  TrendingUp,
+    16→  IndianRupee,
+    17→  Clock,
+    18→  CheckCircle,
+    19→  Loader2,
+    20→  Download,
+    21→  ArrowUpRight,
+    22→  ArrowDownLeft,
+    23→  Info,
+    24→  ChevronRight,
+    25→  Receipt,
+    26→  BadgeDollarSign,
+    27→  CreditCard,
+    28→  Building2,
+    29→  Sparkles,
+    30→} from 'lucide-react';
+    31→import {
+    32→  AreaChart,
+    33→  Area,
+    34→  XAxis,
+    35→  YAxis,
+    36→  CartesianGrid,
+    37→  Tooltip,
+    38→  ResponsiveContainer,
+    39→  BarChart,
+    40→  Bar,
+    41→  Cell,
+    42→  PieChart,
+    43→  Pie,
+    44→} from 'recharts';
+    45→import {
+    46→  mockCaregiver,
+    47→  mockEarnings,
+    48→  mockMonthlyEarnings,
+    49→  mockWeeklyEarnings,
+    50→} from '@/lib/caregiver-data';
+    51→
+    52→// ─── Types ────────────────────────────────────────────────────────────────────
+    53→
+    54→type Period = 'today' | 'thisWeek' | 'thisMonth' | 'total';
+    55→type ChartPeriod = 'monthly' | 'weekly';
+    56→
+    57→interface SummaryCard {
+    58→  key: Period;
+    59→  label: string;
+    60→  value: number;
+    61→  sublabel: string;
+    62→  icon: typeof Wallet;
+    63→  color: string;
+    64→  activeColor: string;
+    65→  activeBorder: string;
+    66→}
+    67→
+    68→// ─── Helpers ────────────────────────────────────────────────────────────────
+    69→
+    70→const formatCurrency = (value: number) => `\u20b9${value.toLocaleString('en-IN')}`;
+    71→
+    72→const statusConfig: Record<string, { label: string; className: string; icon: typeof CheckCircle }> = {
+    73→  paid: {
+    74→    label: 'Paid',
+    75→    className: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    76→    icon: CheckCircle,
+    77→  },
+    78→  pending: {
+    79→    label: 'Pending',
+    80→    className: 'bg-amber-50 text-amber-700 border border-amber-200',
+    81→    icon: Clock,
+    82→  },
+    83→  processing: {
+    84→    label: 'Processing',
+    85→    className: 'bg-blue-50 text-blue-700 border border-blue-200',
+    86→    icon: Loader2,
+    87→  },
+    88→};
+    89→
+    90→const PIE_COLORS = ['#10b981', '#f59e0b', '#3b82f6'];
+    91→
+    92→const CustomTooltip = ({
+    93→  active,
+    94→  payload,
+    95→  label,
+    96→}: {
+    97→  active?: boolean;
+    98→  payload?: { value: number }[];
+    99→  label?: string;
+   100→}) => {
+   101→  if (active && payload && payload.length) {
+   102→    return (
+   103→      <div className="rounded-lg border border-gray-100 bg-white px-3 py-2 shadow-md">
+   104→        <p className="text-[11px] font-medium text-gray-500">{label}</p>
+   105→        <p className="text-sm font-bold text-gray-900">
+   106→          {formatCurrency(payload[0].value)}
+   107→        </p>
+   108→      </div>
+   109→    );
+   110→  }
+   111→  return null;
+   112→};
+   113→
+   114→// ─── Component ────────────────────────────────────────────────────────────────
+   115→
+   116→export default function EarningsView() {
+   117→  const [activeCard, setActiveCard] = useState<Period>('thisMonth');
+   118→  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('monthly');
+   119→  const [selectedTransaction, setSelectedTransaction] = useState<string | null>(null);
+   120→  const [payoutRequested, setPayoutRequested] = useState(false);
+   121→  const [downloading, setDownloading] = useState(false);
+   122→  const [liveOffset, setLiveOffset] = useState(0);
+   123→  const [animatingCard, setAnimatingCard] = useState<string | null>(null);
+   124→
+   125→  // Live earnings simulation — small random increments every 8s
+   126→  useEffect(() => {
+   127→    const interval = setInterval(() => {
+   128→      setLiveOffset((prev) => prev + Math.floor(Math.random() * 200) + 50);
+   129→    }, 8000);
+   130→    return () => clearInterval(interval);
+   131→  }, []);
+   132→
+   133→  // Computed summary cards
+   134→  const summaryCards: SummaryCard[] = [
+   135→    {
+   136→      key: 'today',
+   137→      label: 'Today',
+   138→      value: mockCaregiver.earnings.today + (activeCard === 'today' ? liveOffset : 0),
+   139→      sublabel: 'Earned today',
+   140→      icon: Wallet,
+   141→      color: 'bg-blue-50 text-blue-600',
+   142→      activeColor: 'bg-blue-100 text-blue-700',
+   143→      activeBorder: 'border-blue-300 ring-1 ring-blue-100',
+   144→    },
+   145→    {
+   146→      key: 'thisWeek',
+   147→      label: 'This Week',
+   148→      value: mockCaregiver.earnings.thisWeek + (activeCard === 'thisWeek' ? liveOffset : 0),
+   149→      sublabel: 'Mon – Sun',
+   150→      icon: TrendingUp,
+   151→      color: 'bg-emerald-50 text-emerald-600',
+   152→      activeColor: 'bg-emerald-100 text-emerald-700',
+   153→      activeBorder: 'border-emerald-300 ring-1 ring-emerald-100',
+   154→    },
+   155→    {
+   156→      key: 'thisMonth',
+   157→      label: 'This Month',
+   158→      value: mockCaregiver.earnings.thisMonth + (activeCard === 'thisMonth' ? liveOffset : 0),
+   159→      sublabel: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+   160→      icon: IndianRupee,
+   161→      color: 'bg-violet-50 text-violet-600',
+   162→      activeColor: 'bg-violet-100 text-violet-700',
+   163→      activeBorder: 'border-violet-300 ring-1 ring-violet-100',
+   164→    },
+   165→    {
+   166→      key: 'total',
+   167→      label: 'Total',
+   168→      value: mockCaregiver.earnings.total + (activeCard === 'total' ? liveOffset : 0),
+   169→      sublabel: 'All time earnings',
+   170→      icon: Clock,
+   171→      color: 'bg-amber-50 text-amber-600',
+   172→      activeColor: 'bg-amber-100 text-amber-700',
+   173→      activeBorder: 'border-amber-300 ring-1 ring-amber-100',
+   174→    },
+   175→  ];
+   176→
+   177→  const activeSummaryCard = summaryCards.find((c) => c.key === activeCard)!;
+   178→
+   179→  // Chart data with live updates blended in
+   180→  const chartData = chartPeriod === 'monthly'
+   181→    ? mockMonthlyEarnings.map((d) => ({ ...d, earnings: d.earnings + Math.floor(Math.random() * 500) }))
+   182→    : mockWeeklyEarnings.map((d) => ({ ...d, earnings: d.earnings + Math.floor(Math.random() * 100) }));
+   183→
+   184→  const chartTotal = chartData.reduce((sum, d) => sum + d.earnings, 0);
+   185→  const chartAvg = Math.round(chartTotal / chartData.length);
+   186→  const chartMax = Math.max(...chartData.map((d) => d.earnings));
+   187→
+   188→  // Status breakdown
+   189→  const paidCount = mockEarnings.filter((e) => e.status === 'paid').length;
+   190→  const pendingCount = mockEarnings.filter((e) => e.status === 'pending').length;
+   191→  const processingCount = mockEarnings.filter((e) => e.status === 'processing').length;
+   192→  const pieData = [
+   193→    { name: 'Paid', value: paidCount },
+   194→    { name: 'Pending', value: pendingCount },
+   195→    { name: 'Processing', value: processingCount },
+   196→  ].filter((d) => d.value > 0);
+   197→
+   198→  // Filtered earnings for selected period
+   199→  const today = new Date();
+   200→  const filteredEarnings = mockEarnings.filter((e) => {
+   201→    const eDate = new Date(e.date);
+   202→    switch (activeCard) {
+   203→      case 'today':
+   204→        return eDate.toDateString() === today.toDateString();
+   205→      case 'thisWeek': {
+   206→        const startOfWeek = new Date(today);
+   207→        startOfWeek.setDate(today.getDate() - today.getDay());
+   208→        return eDate >= startOfWeek;
+   209→      }
+   210→      case 'thisMonth':
+   211→        return eDate.getMonth() === today.getMonth() && eDate.getFullYear() === today.getFullYear();
+   212→      case 'total':
+   213→        return true;
+   214→      default:
+   215→        return true;
+   216→    }
+   217→  });
+   218→
+   219→  const handleCardClick = (key: Period) => {
+   220→    setAnimatingCard(key);
+   221→    setActiveCard(key);
+   222→    setLiveOffset(0);
+   223→    setTimeout(() => setAnimatingCard(null), 400);
+   224→  };
+   225→
+   226→  const handleRequestPayout = () => {
+   227→    setPayoutRequested(true);
+   228→    setTimeout(() => setPayoutRequested(false), 3000);
+   229→  };
+   230→
+   231→  const handleDownload = () => {
+   232→    setDownloading(true);
+   233→    setTimeout(() => setDownloading(false), 2000);
+   234→  };
+   235→
+   236→  const handleRowClick = (id: string) => {
+   237→    setSelectedTransaction(selectedTransaction === id ? null : id);
+   238→  };
+   239→
+   240→  // ─── Custom Pie Label ────────────────────────────────────────────────────
+   241→
+   242→  const renderCustomLabel = ({
+   243→    cx,
+   244→    cy,
+   245→    midAngle,
+   246→    innerRadius,
+   247→    outerRadius,
+   248→    percent,
+   249→    name,
+   250→  }: {
+   251→    cx: number;
+   252→    cy: number;
+   253→    midAngle: number;
+   254→    innerRadius: number;
+   255→    outerRadius: number;
+   256→    percent: number;
+   257→    name: string;
+   258→  }) => {
+   259→    const RADIAN = Math.PI / 180;
+   260→    const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
+   261→    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+   262→    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+   263→
+   264→    return (
+   265→      <text x={x} y={y} textAnchor={x > cx ? 'start' : 'end'} className="text-[11px] fill-gray-500 font-medium">
+   266→        {name} ({(percent * 100).toFixed(0)}%)
+   267→      </text>
+   268→    );
+   269→  };
+   270→
+   271→  return (
+   272→    <div className="space-y-6">
+   273→      {/* ===== Section 1: Summary Cards (Clickable) ===== */}
+   274→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+   275→        {summaryCards.map((card) => {
+   276→          const Icon = card.icon;
+   277→          const isActive = activeCard === card.key;
+   278→          const isAnimating = animatingCard === card.key;
+   279→          return (
+   280→            <button
+   281→              key={card.key}
+   282→              onClick={() => handleCardClick(card.key)}
+   283→              className={`bg-card rounded-xl border shadow-sm py-5 text-left transition-all duration-300 hover:shadow-md cursor-pointer w-full ${
+   284→                isActive
+   285→                  ? `${card.activeBorder} ${isAnimating ? 'scale-[1.03]' : 'scale-[1.01]'}`
+   286→                  : 'border-gray-100 hover:border-gray-200'
+   287→              }`}
+   288→            >
+   289→              <div className="flex items-center gap-3 mb-3 px-4">
+   290→                <div
+   291→                  className={`size-10 rounded-xl flex items-center justify-center transition-colors ${
+   292→                    isActive ? card.activeColor : card.color
+   293→                  }`}
+   294→                >
+   295→                  <Icon className="size-5" />
+   296→                </div>
+   297→                {isActive && (
+   298→                  <div className="ml-auto">
+   299→                    <div className="size-2 rounded-full bg-blue-500 animate-pulse" />
+   300→                  </div>
+   301→                )}
+   302→              </div>
+   303→              <div className="px-4">
+   304→                <p className={`text-xs font-medium transition-colors ${isActive ? 'text-gray-700' : 'text-gray-500'}`}>
+   305→                  {card.label}
+   306→                </p>
+   307→                <p className={`text-xl font-bold sm:text-2xl transition-colors ${isActive ? 'text-gray-900' : 'text-gray-900'}`}>
+   308→                  {formatCurrency(card.value)}
+   309→                </p>
+   310→                <p className="text-[11px] text-gray-400 mt-0.5">{card.sublabel}</p>
+   311→              </div>
+   312→            </button>
+   313→          );
+   314→        })}
+   315→      </div>
+   316→
+   317→      {/* Active card info bar */}
+   318→      <div className="flex items-center gap-2 px-1">
+   319→        <div className="size-2 rounded-full bg-blue-500" />
+   320→        <span className="text-xs text-gray-500">
+   321→          Viewing: <span className="font-semibold text-gray-700">{activeSummaryCard.label}</span> earnings
+   322→          {filteredEarnings.length > 0 && (
+   323→            <span className="text-gray-400"> — {filteredEarnings.length} transaction{filteredEarnings.length > 1 ? 's' : ''}</span>
+   324→          )}
+   325→        </span>
+   326→      </div>
+   327→
+   328→      {/* ===== Section 2: Tabs ===== */}
+   329→      <Tabs defaultValue="overview" className="w-full">
+   330→        <TabsList className="mb-4">
+   331→          <TabsTrigger value="overview">Overview</TabsTrigger>
+   332→          <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
+   333→          <TabsTrigger value="history">Payment History</TabsTrigger>
+   334→        </TabsList>
+   335→
+   336→        {/* ——— Tab 1: Overview ——— */}
+   337→        <TabsContent value="overview" className="space-y-4">
+   338→          <div className="grid lg:grid-cols-3 gap-4">
+   339→            {/* Chart Card with Monthly/Weekly toggle */}
+   340→            <Card className="lg:col-span-2">
+   341→              <CardHeader className="pb-2">
+   342→                <div className="flex items-center justify-between">
+   343→                  <CardTitle className="text-sm font-semibold text-gray-900">
+   344→                    Earnings Overview
+   345→                  </CardTitle>
+   346→                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+   347→                    <button
+   348→                      onClick={() => setChartPeriod('monthly')}
+   349→                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+   350→                        chartPeriod === 'monthly'
+   351→                          ? 'bg-white text-gray-900 shadow-sm'
+   352→                          : 'text-gray-500 hover:text-gray-700'
+   353→                      }`}
+   354→                    >
+   355→                      Monthly
+   356→                    </button>
+   357→                    <button
+   358→                      onClick={() => setChartPeriod('weekly')}
+   359→                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+   360→                        chartPeriod === 'weekly'
+   361→                          ? 'bg-white text-gray-900 shadow-sm'
+   362→                          : 'text-gray-500 hover:text-gray-700'
+   363→                      }`}
+   364→                    >
+   365→                      Weekly
+   366→                    </button>
+   367→                  </div>
+   368→                </div>
+   369→              </CardHeader>
+   370→              <CardContent>
+   371→                <div className="h-[240px]">
+   372→                  <ResponsiveContainer width="100%" height="100%">
+   373→                    {chartPeriod === 'monthly' ? (
+   374→                      <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+   375→                        <defs>
+   376→                          <linearGradient id="monthlyGradient" x1="0" y1="0" x2="0" y2="1">
+   377→                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+   378→                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+   379→                          </linearGradient>
+   380→                        </defs>
+   381→                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+   382→                        <XAxis dataKey={chartPeriod === 'monthly' ? 'month' : 'day'} axisLine={false} tickLine={false} fontSize={11} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+   383→                        <YAxis hide />
+   384→                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+   385→                        <Area type="monotone" dataKey="earnings" stroke="#3b82f6" strokeWidth={2} fill="url(#monthlyGradient)" />
+   386→                      </AreaChart>
+   387→                    ) : (
+   388→                      <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+   389→                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+   390→                        <XAxis dataKey="day" axisLine={false} tickLine={false} fontSize={11} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+   391→                        <YAxis hide />
+   392→                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
+   393→                        <Bar dataKey="earnings" radius={[6, 6, 0, 0]} maxBarSize={36}>
+   394→                          {chartData.map((entry, index) => (
+   395→                            <Cell
+   396→                              key={index}
+   397→                              fill={entry.earnings === 0 ? '#e2e8f0' : '#3b82f6'}
+   398→                            />
+   399→                          ))}
+   400→                        </Bar>
+   401→                      </BarChart>
+   402→                    )}
+   403→                  </ResponsiveContainer>
+   404→                </div>
+   405→                {/* Chart Stats Row */}
+   406→                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+   407→                  <div className="text-center">
+   408→                    <p className="text-[11px] text-gray-400 font-medium">Total</p>
+   409→                    <p className="text-sm font-bold text-gray-900">{formatCurrency(chartTotal)}</p>
+   410→                  </div>
+   411→                  <div className="text-center">
+   412→                    <p className="text-[11px] text-gray-400 font-medium">Average</p>
+   413→                    <p className="text-sm font-bold text-gray-900">{formatCurrency(chartAvg)}</p>
+   414→                  </div>
+   415→                  <div className="text-center">
+   416→                    <p className="text-[11px] text-gray-400 font-medium">Peak</p>
+   417→                    <p className="text-sm font-bold text-emerald-600">{formatCurrency(chartMax)}</p>
+   418→                  </div>
+   419→                </div>
+   420→              </CardContent>
+   421→            </Card>
+   422→
+   423→            {/* Right Column — Status Pie + Quick Stats */}
+   424→            <div className="space-y-4">
+   425→              {/* Status Breakdown Pie */}
+   426→              <Card>
+   427→                <CardHeader className="pb-2">
+   428→                  <CardTitle className="text-sm font-semibold text-gray-900">
+   429→                    Status Breakdown
+   430→                  </CardTitle>
+   431→                </CardHeader>
+   432→                <CardContent>
+   433→                  <div className="h-[160px]">
+   434→                    <ResponsiveContainer width="100%" height="100%">
+   435→                      <PieChart>
+   436→                        <Pie
+   437→                          data={pieData}
+   438→                          cx="50%"
+   439→                          cy="50%"
+   440→                          innerRadius={35}
+   441→                          outerRadius={55}
+   442→                          dataKey="value"
+   443→                          labelLine={false}
+   444→                          label={renderCustomLabel}
+   445→                        >
+   446→                          {pieData.map((_, index) => (
+   447→                            <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+   448→                          ))}
+   449→                        </Pie>
+   450→                        <Tooltip
+   451→                          formatter={(value: number) => [`${value} transactions`, 'Count']}
+   452→                          contentStyle={{
+   453→                            borderRadius: '8px',
+   454→                            border: '1px solid #f1f5f9',
+   455→                            fontSize: '12px',
+   456→                          }}
+   457→                        />
+   458→                      </PieChart>
+   459→                    </ResponsiveContainer>
+   460→                  </div>
+   461→                  {/* Legend */}
+   462→                  <div className="flex items-center justify-center gap-4 mt-2">
+   463→                    {pieData.map((item, index) => (
+   464→                      <button
+   465→                        key={item.name}
+   466→                        className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
+   467→                      >
+   468→                        <div className="size-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[index] }} />
+   469→                        {item.name} ({item.value})
+   470→                      </button>
+   471→                    ))}
+   472→                  </div>
+   473→                </CardContent>
+   474→              </Card>
+   475→
+   476→              {/* Quick Stats */}
+   477→              <Card>
+   478→                <CardContent className="p-4 space-y-3">
+   479→                  <div className="flex items-center justify-between">
+   480→                    <div className="flex items-center gap-2">
+   481→                      <Receipt className="size-4 text-gray-400" />
+   482→                      <span className="text-xs text-gray-500">Total Transactions</span>
+   483→                    </div>
+   484→                    <span className="text-sm font-bold text-gray-900">{mockEarnings.length}</span>
+   485→                  </div>
+   486→                  <div className="h-px bg-gray-100" />
+   487→                  <div className="flex items-center justify-between">
+   488→                    <div className="flex items-center gap-2">
+   489→                      <TrendingUp className="size-4 text-emerald-500" />
+   490→                      <span className="text-xs text-gray-500">Avg. per Transaction</span>
+   491→                    </div>
+   492→                    <span className="text-sm font-bold text-gray-900">
+   493→                      {formatCurrency(Math.round(mockEarnings.reduce((s, e) => s + e.amount, 0) / mockEarnings.length))}
+   494→                    </span>
+   495→                  </div>
+   496→                  <div className="h-px bg-gray-100" />
+   497→                  <div className="flex items-center justify-between">
+   498→                    <div className="flex items-center gap-2">
+   499→                      <Sparkles className="size-4 text-amber-500" />
+   500→                      <span className="text-xs text-gray-500">Best Day</span>
+   501→                    </div>
+   502→                    <span className="text-sm font-bold text-gray-900">{formatCurrency(chartMax)}</span>
+   503→                  </div>
+   504→                </CardContent>
+   505→              </Card>
+   506→            </div>
+   507→          </div>
+   508→
+   509→          {/* Payout Summary — Clickable Status Segments */}
+   510→          <Card>
+   511→            <CardHeader className="pb-3">
+   512→              <div className="flex items-center justify-between">
+   513→                <CardTitle className="text-sm font-semibold text-gray-900">
+   514→                  Payout Summary
+   515→                </CardTitle>
+   516→                <Badge variant="outline" className="text-[10px] text-gray-500 border-gray-200 bg-gray-50">
+   517→                  <Info className="size-3 mr-1" />
+   518→                  Click segments for details
+   519→                </Badge>
+   520→              </div>
+   521→            </CardHeader>
+   522→            <CardContent className="space-y-3">
+   523→              {/* Paid Segment */}
+   524→              <button
+   525→                onClick={() => setActiveCard('total')}
+   526→                className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 hover:bg-emerald-50 transition-all cursor-pointer text-left group"
+   527→              >
+   528→                <div className="flex items-center gap-3">
+   529→                  <div className="size-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+   530→                    <CheckCircle className="size-4 text-emerald-600" />
+   531→                  </div>
+   532→                  <div>
+   533→                    <p className="text-xs font-medium text-gray-500">Total Paid</p>
+   534→                    <p className="text-lg font-bold text-gray-900">{formatCurrency(mockCaregiver.earnings.paid)}</p>
+   535→                  </div>
+   536→                </div>
+   537→                <div className="flex items-center gap-2 ml-12 sm:ml-0">
+   538→                  <Badge variant="outline" className={statusConfig.paid.className}>
+   539→                    <CheckCircle className="size-3 mr-1" />
+   540→                    {paidCount} Paid
+   541→                  </Badge>
+   542→                  <ChevronRight className="size-4 text-gray-300 group-hover:text-emerald-500 transition-colors" />
+   543→                </div>
+   544→              </button>
+   545→
+   546→              {/* Pending Segment */}
+   547→              <button
+   548→                onClick={() => setActiveCard('thisMonth')}
+   549→                className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50/50 p-4 hover:bg-amber-50 transition-all cursor-pointer text-left group"
+   550→              >
+   551→                <div className="flex items-center gap-3">
+   552→                  <div className="size-9 rounded-lg bg-amber-100 flex items-center justify-center">
+   553→                    <Clock className="size-4 text-amber-600" />
+   554→                  </div>
+   555→                  <div>
+   556→                    <p className="text-xs font-medium text-gray-500">Pending Payout</p>
+   557→                    <p className="text-lg font-bold text-gray-900">{formatCurrency(mockCaregiver.earnings.pending)}</p>
+   558→                  </div>
+   559→                </div>
+   560→                <div className="flex items-center gap-2 ml-12 sm:ml-0">
+   561→                  <Badge variant="outline" className={statusConfig.pending.className}>
+   562→                    <Loader2 className="size-3 mr-1 animate-spin" />
+   563→                    {pendingCount} Pending
+   564→                  </Badge>
+   565→                  <ChevronRight className="size-4 text-gray-300 group-hover:text-amber-500 transition-colors" />
+   566→                </div>
+   567→              </button>
+   568→
+   569→              {/* Processing Segment */}
+   570→              <button
+   571→                onClick={() => setActiveCard('thisWeek')}
+   572→                className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/50 p-4 hover:bg-blue-50 transition-all cursor-pointer text-left group"
+   573→              >
+   574→                <div className="flex items-center gap-3">
+   575→                  <div className="size-9 rounded-lg bg-blue-100 flex items-center justify-center">
+   576→                    <Loader2 className="size-4 text-blue-600 animate-spin" />
+   577→                  </div>
+   578→                  <div>
+   579→                    <p className="text-xs font-medium text-gray-500">Processing</p>
+   580→                    <p className="text-lg font-bold text-gray-900">{formatCurrency(mockEarnings.filter((e) => e.status === 'processing').reduce((s, e) => s + e.amount, 0))}</p>
+   581→                  </div>
+   582→                </div>
+   583→                <div className="flex items-center gap-2 ml-12 sm:ml-0">
+   584→                  <Badge variant="outline" className={statusConfig.processing.className}>
+   585→                    <Loader2 className="size-3 mr-1" />
+   586→                    {processingCount} Processing
+   587→                  </Badge>
+   588→                  <ChevronRight className="size-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
+   589→                </div>
+   590→              </button>
+   591→
+   592→              {/* Request Payout Button */}
+   593→              <div className="pt-2">
+   594→                <Button
+   595→                  onClick={handleRequestPayout}
+   596→                  disabled={payoutRequested || mockCaregiver.earnings.pending === 0}
+   597→                  className={`w-full h-11 rounded-xl shadow-sm transition-all ${
+   598→                    payoutRequested
+   599→                      ? 'bg-emerald-500 text-white'
+   600→                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700'
+   601→                  }`}
+   602→                >
+   603→                  {payoutRequested ? (
+   604→                    <>
+   605→                      <CheckCircle className="size-4 mr-2" />
+   606→                      Payout Requested Successfully!
+   607→                    </>
+   608→                  ) : (
+   609→                    <>
+   610→                      <CreditCard className="size-4 mr-2" />
+   611→                      Request Payout — {formatCurrency(mockCaregiver.earnings.pending)}
+   612→                      <ArrowUpRight className="size-3.5 ml-1" />
+   613→                    </>
+   614→                  )}
+   615→                </Button>
+   616→              </div>
+   617→            </CardContent>
+   618→          </Card>
+   619→        </TabsContent>
+   620→
+   621→        {/* ——— Tab 2: Breakdown ——— */}
+   622→        <TabsContent value="breakdown" className="space-y-4">
+   623→          <div className="grid md:grid-cols-2 gap-4">
+   624→            {/* Earnings by Service Type */}
+   625→            <Card>
+   626→              <CardHeader className="pb-3">
+   627→                <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   628→                  <BadgeDollarSign className="size-4 text-gray-400" />
+   629→                  Earnings by Service
+   630→                </CardTitle>
+   631→              </CardHeader>
+   632→              <CardContent className="space-y-2">
+   633→                {(() => {
+   634→                  const serviceMap: Record<string, { total: number; count: number }> = {};
+   635→                  mockEarnings.forEach((e) => {
+   636→                    if (!serviceMap[e.serviceType]) serviceMap[e.serviceType] = { total: 0, count: 0 };
+   637→                    serviceMap[e.serviceType].total += e.amount;
+   638→                    serviceMap[e.serviceType].count++;
+   639→                  });
+   640→                  const services = Object.entries(serviceMap).sort((a, b) => b[1].total - a[1].total);
+   641→                  const maxTotal = services[0]?.[1].total || 1;
+   642→
+   643→                  return services.map(([name, data]) => (
+   644→                    <button
+   645→                      key={name}
+   646→                      onClick={() => setActiveCard('total')}
+   647→                      className="w-full text-left cursor-pointer group"
+   648→                    >
+   649→                      <div className="flex items-center justify-between mb-1">
+   650→                        <span className="text-xs font-medium text-gray-700 group-hover:text-blue-700 transition-colors truncate">
+   651→                          {name}
+   652→                        </span>
+   653→                        <span className="text-xs font-bold text-gray-900">{formatCurrency(data.total)}</span>
+   654→                      </div>
+   655→                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+   656→                        <div
+   657→                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
+   658→                          style={{ width: `${(data.total / maxTotal) * 100}%` }}
+   659→                        />
+   660→                      </div>
+   661→                      <p className="text-[10px] text-gray-400 mt-0.5">{data.count} booking{data.count > 1 ? 's' : ''}</p>
+   662→                    </button>
+   663→                  ));
+   664→                })()}
+   665→              </CardContent>
+   666→            </Card>
+   667→
+   668→            {/* Earnings by Care Member */}
+   669→            <Card>
+   670→              <CardHeader className="pb-3">
+   671→                <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+   672→                  <Building2 className="size-4 text-gray-400" />
+   673→                  Earnings by Care Member
+   674→                </CardTitle>
+   675→              </CardHeader>
+   676→              <CardContent className="space-y-2">
+   677→                {(() => {
+   678→                  const patientMap: Record<string, { total: number; count: number }> = {};
+   679→                  mockEarnings.forEach((e) => {
+   680→                    if (!patientMap[e.patientName]) patientMap[e.patientName] = { total: 0, count: 0 };
+   681→                    patientMap[e.patientName].total += e.amount;
+   682→                    patientMap[e.patientName].count++;
+   683→                  });
+   684→                  const patients = Object.entries(patientMap).sort((a, b) => b[1].total - a[1].total);
+   685→                  const maxTotal = patients[0]?.[1].total || 1;
+   686→
+   687→                  return patients.map(([name, data]) => (
+   688→                    <button
+   689→                      key={name}
+   690→                      onClick={() => setActiveCard('total')}
+   691→                      className="w-full text-left cursor-pointer group"
+   692→                    >
+   693→                      <div className="flex items-center justify-between mb-1">
+   694→                        <span className="text-xs font-medium text-gray-700 group-hover:text-blue-700 transition-colors truncate">
+   695→                          {name}
+   696→                        </span>
+   697→                        <span className="text-xs font-bold text-gray-900">{formatCurrency(data.total)}</span>
+   698→                      </div>
+   699→                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+   700→                        <div
+   701→                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+   702→                          style={{ width: `${(data.total / maxTotal) * 100}%` }}
+   703→                        />
+   704→                      </div>
+   705→                      <p className="text-[10px] text-gray-400 mt-0.5">{data.count} shift{data.count > 1 ? 's' : ''}</p>
+   706→                    </button>
+   707→                  ));
+   708→                })()}
+   709→              </CardContent>
+   710→            </Card>
+   711→          </div>
+   712→
+   713→          {/* Earnings Trend — Monthly comparison */}
+   714→          <Card>
+   715→            <CardHeader className="pb-2">
+   716→              <CardTitle className="text-sm font-semibold text-gray-900">
+   717→                Monthly Trend
+   718→              </CardTitle>
+   719→            </CardHeader>
+   720→            <CardContent>
+   721→              <div className="h-[200px]">
+   722→                <ResponsiveContainer width="100%" height="100%">
+   723→                  <BarChart data={mockMonthlyEarnings} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+   724→                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+   725→                    <XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={11} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+   726→                    <YAxis hide />
+   727→                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
+   728→                    <Bar dataKey="earnings" radius={[4, 4, 0, 0]} maxBarSize={40}>
+   729→                      {mockMonthlyEarnings.map((entry, index) => {
+   730→                        const max = Math.max(...mockMonthlyEarnings.map((d) => d.earnings));
+   731→                        return (
+   732→                          <Cell
+   733→                            key={index}
+   734→                            fill={entry.earnings === max ? '#10b981' : '#3b82f6'}
+   735→                          />
+   736→                        );
+   737→                      })}
+   738→                    </Bar>
+   739→                  </BarChart>
+   740→                </ResponsiveContainer>
+   741→              </div>
+   742→              <p className="text-[11px] text-gray-400 text-center mt-2">
+   743→                <span className="inline-flex items-center gap-1">
+   744→                  <span className="size-2 rounded-full bg-emerald-500" /> Highest earning month highlighted
+   745→                </span>
+   746→              </p>
+   747→            </CardContent>
+   748→          </Card>
+   749→        </TabsContent>
+   750→
+   751→        {/* ——— Tab 3: Payment History ——— */}
+   752→        <TabsContent value="history">
+   753→          <Card>
+   754→            <CardContent className="p-0">
+   755→              {/* Header Row */}
+   756→              <div className="hidden md:flex items-center gap-4 px-4 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+   757→                <span className="w-20">Date</span>
+   758→                <span className="w-24">Booking</span>
+   759→                <span className="flex-1">Care Member</span>
+   760→                <span className="w-40">Service</span>
+   761→                <span className="w-20 text-right">Amount</span>
+   762→                <span className="w-20 text-right">Status</span>
+   763→              </div>
+   764→
+   765→              {/* Rows — clickable */}
+   766→              <div className="divide-y divide-gray-50">
+   767→                {filteredEarnings.map((record) => {
+   768→                  const cfg = statusConfig[record.status];
+   769→                  const StatusIcon = cfg.icon;
+   770→                  const isExpanded = selectedTransaction === record.id;
+   771→
+   772→                  return (
+   773→                    <div key={record.id}>
+   774→                      <button
+   775→                        onClick={() => handleRowClick(record.id)}
+   776→                        className={`w-full flex items-center gap-4 px-4 py-3 transition-colors text-left cursor-pointer ${
+   777→                          isExpanded ? 'bg-blue-50/50' : 'hover:bg-gray-50/50'
+   778→                        }`}
+   779→                      >
+   780→                        {/* Expand chevron */}
+   781→                        <ChevronRight
+   782→                          className={`size-4 text-gray-300 shrink-0 transition-transform duration-200 ${
+   783→                            isExpanded ? 'rotate-90' : ''
+   784→                          }`}
+   785→                        />
+   786→
+   787→                        {/* Date + Booking (mobile) / separate (desktop) */}
+   788→                        <div className="w-20 shrink-0">
+   789→                          <p className="text-xs text-gray-500">
+   790→                            {new Date(record.date).toLocaleDateString('en-IN', {
+   791→                              day: '2-digit',
+   792→                              month: 'short',
+   793→                            })}
+   794→                          </p>
+   795→                          <p className="text-[11px] font-mono text-gray-400 md:hidden">
+   796→                            {record.bookingId}
+   797→                          </p>
+   798→                        </div>
+   799→
+   800→                        {/* Booking ID — hidden on mobile */}
+   801→                        <span className="hidden md:block w-24 text-xs font-mono text-gray-400">
+   802→                          {record.bookingId}
+   803→                        </span>
+   804→
+   805→                        {/* Care Member */}
+   806→                        <span className="flex-1 text-sm font-medium text-gray-900 truncate">
+   807→                          {record.patientName}
+   808→                        </span>
+   809→
+   810→                        {/* Service — hidden on mobile */}
+   811→                        <span className="hidden sm:block w-40 text-xs text-gray-500 truncate">
+   812→                          {record.serviceType}
+   813→                        </span>
+   814→
+   815→                        {/* Amount */}
+   816→                        <span className="w-20 shrink-0 text-sm font-semibold text-gray-900 text-right">
+   817→                          {formatCurrency(record.amount)}
+   818→                        </span>
+   819→
+   820→                        {/* Status */}
+   821→                        <div className="w-20 shrink-0 flex justify-end">
+   822→                          <Badge variant="outline" className={cfg.className}>
+   823→                            <StatusIcon className={`size-3 mr-1 ${record.status === 'pending' ? 'animate-spin' : ''}`} />
+   824→                            {cfg.label}
+   825→                          </Badge>
+   826→                        </div>
+   827→                      </button>
+   828→
+   829→                      {/* Expanded Detail */}
+   830→                      {isExpanded && (
+   831→                        <div className="px-12 py-3 bg-blue-50/30 border-t border-blue-100/50 space-y-2 animate-in slide-in-from-top-1 duration-200">
+   832→                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   833→                            <div>
+   834→                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Transaction ID</p>
+   835→                              <p className="text-xs font-mono font-medium text-gray-700">{record.id}</p>
+   836→                            </div>
+   837→                            <div>
+   838→                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Booking ID</p>
+   839→                              <p className="text-xs font-mono font-medium text-gray-700">{record.bookingId}</p>
+   840→                            </div>
+   841→                            <div>
+   842→                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Service</p>
+   843→                              <p className="text-xs font-medium text-gray-700">{record.serviceType}</p>
+   844→                            </div>
+   845→                            <div>
+   846→                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Amount</p>
+   847→                              <p className="text-xs font-bold text-gray-900">{formatCurrency(record.amount)}</p>
+   848→                            </div>
+   849→                          </div>
+   850→                          <div className="flex items-center gap-2 pt-1">
+   851→                            <Badge variant="outline" className={cfg.className}>
+   852→                              <StatusIcon className={`size-3 mr-1 ${record.status === 'pending' ? 'animate-spin' : ''}`} />
+   853→                              {cfg.label}
+   854→                            </Badge>
+   855→                            <span className="text-[11px] text-gray-400">
+   856→                              {record.status === 'paid' && `Credited on ${new Date(record.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+   857→                              {record.status === 'pending' && 'Expected within 2-3 business days'}
+   858→                              {record.status === 'processing' && 'Being processed by bank'}
+   859→                            </span>
+   860→                          </div>
+   861→                        </div>
+   862→                      )}
+   863→                    </div>
+   864→                  );
+   865→                })}
+   866→                {filteredEarnings.length === 0 && (
+   867→                  <div className="flex flex-col items-center justify-center py-12 text-center">
+   868→                    <Wallet className="size-10 text-gray-200 mb-3" />
+   869→                    <p className="text-sm font-medium text-gray-500">No transactions found</p>
+   870→                    <p className="text-xs text-gray-400 mt-0.5">No earnings recorded for the selected period</p>
+   871→                  </div>
+   872→                )}
+   873→              </div>
+   874→
+   875→              {/* Footer */}
+   876→              {filteredEarnings.length > 0 && (
+   877→                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+   878→                  <p className="text-xs text-gray-400">
+   879→                    Showing {filteredEarnings.length} of {mockEarnings.length} records
+   880→                    {activeCard !== 'total' && (
+   881→                      <span className="ml-1 text-blue-500 cursor-pointer hover:underline" onClick={() => setActiveCard('total')}>
+   882→                        (Show all)
+   883→                      </span>
+   884→                    )}
+   885→                  </p>
+   886→                  <Button
+   887→                    variant="outline"
+   888→                    size="sm"
+   889→                    className="text-gray-500 hover:text-gray-700"
+   890→                    onClick={handleDownload}
+   891→                    disabled={downloading}
+   892→                  >
+   893→                    {downloading ? (
+   894→                      <>
+   895→                        <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+   896→                        Generating...
+   897→                      </>
+   898→                    ) : (
+   899→                      <>
+   900→                        <Download className="size-3.5 mr-1.5" />
+   901→                        Download Report
+   902→                      </>
+   903→                    )}
+   904→                  </Button>
+   905→                </div>
+   906→              )}
+   907→            </CardContent>
+   908→          </Card>
+   909→        </TabsContent>
+   910→      </Tabs>
+   911→    </div>
+   912→  );
+   913→}
+   914→

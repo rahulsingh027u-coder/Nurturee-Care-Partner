@@ -1,0 +1,1072 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback, useRef } from 'react';
+     4→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Label } from '@/components/ui/label';
+     9→import { Separator } from '@/components/ui/separator';
+    10→import { Calendar } from '@/components/ui/calendar';
+    11→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+    12→import {
+    13→  Shield,
+    14→  CheckCircle,
+    15→  XCircle,
+    16→  Clock,
+    17→  ArrowLeft,
+    18→  Upload,
+    19→  FileText,
+    20→  CalendarIcon,
+    21→  Camera,
+    22→  UserCircle,
+    23→  Heart,
+    24→  AlertCircle,
+    25→  Loader2,
+    26→  Ban,
+    27→  Send,
+    28→  RefreshCw,
+    29→  Sparkles,
+    30→} from 'lucide-react';
+    31→import { format } from 'date-fns';
+    32→import { mockCaregiver } from '@/lib/caregiver-data';
+    33→
+    34→// ─── Constants ────────────────────────────────────────────────────────────────
+    35→
+    36→const VERIFICATION_STORAGE_KEY = 'nurturee_caregiver_verification';
+    37→const MAX_ATTEMPTS = 3;
+    38→const REJECTION_REASONS = [
+    39→  'Document is blurry/unreadable',
+    40→  'Information does not match records',
+    41→  'Document appears to be expired',
+    42→  'Image quality too low for verification',
+    43→];
+    44→
+    45→// ─── Types ────────────────────────────────────────────────────────────────────
+    46→
+    47→type VerificationType = 'aadhaar' | 'police' | 'medical' | 'video';
+    48→type VerificationStatus = 'not_started' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'max_attempts_reached';
+    49→
+    50→interface VerificationDoc {
+    51→  id: string;
+    52→  type: VerificationType;
+    53→  status: VerificationStatus;
+    54→  attempts: Array<{
+    55→    attemptNumber: number;
+    56→    submittedAt: string;
+    57→    documents: Array<{ id: string; name: string; size: number; type: string }>;
+    58→    formFields: Record<string, string>;
+    59→    status: 'submitted' | 'approved' | 'rejected';
+    60→    reviewedAt?: string;
+    61→    rejectionReason?: string;
+    62→  }>;
+    63→  currentDraft: { documents: Array<{ id: string; name: string; size: number; type: string }>; formFields: Record<string, string> };
+    64→}
+    65→
+    66→// ─── Props ────────────────────────────────────────────────────────────────────
+    67→
+    68→interface VerificationPageProps {
+    69→  onComplete?: () => void;
+    70→  optionalMode?: boolean;
+    71→}
+    72→
+    73→// ─── Verification Config ──────────────────────────────────────────────────────
+    74→
+    75→interface VerificationField {
+    76→  key: string;
+    77→  label: string;
+    78→  type: 'text' | 'date' | 'select';
+    79→  placeholder?: string;
+    80→  options?: string[];
+    81→  required?: boolean;
+    82→}
+    83→
+    84→const verificationConfig: Record<VerificationType, {
+    85→  title: string;
+    86→  description: string;
+    87→  icon: typeof Shield;
+    88→  mandatory: boolean;
+    89→  fields: VerificationField[];
+    90→  maxFileSize: number;
+    91→  allowedTypes: string[];
+    92→}> = {
+    93→  aadhaar: {
+    94→    title: 'Aadhaar Verification',
+    95→    description: 'Upload your Aadhaar card (front and back) for identity verification. This is mandatory to start accepting assignments.',
+    96→    icon: Shield,
+    97→    mandatory: true,
+    98→    fields: [
+    99→      { key: 'fullName', label: 'Full Name (as on Aadhaar)', type: 'text', placeholder: 'Enter full name', required: true },
+   100→      { key: 'dateOfBirth', label: 'Date of Birth', type: 'date', required: true },
+   101→      { key: 'aadhaarNumber', label: 'Aadhaar Number', type: 'text', placeholder: 'XXXX XXXX XXXX', required: true },
+   102→    ],
+   103→    maxFileSize: 5 * 1024 * 1024,
+   104→    allowedTypes: ['image/jpeg', 'image/png', 'image/heic', 'application/pdf'],
+   105→  },
+   106→  police: {
+   107→    title: 'Police Verification',
+   108→    description: 'Upload your police verification certificate for background check. This helps build trust with families.',
+   109→    icon: FileText,
+   110→    mandatory: false,
+   111→    fields: [
+   112→      { key: 'certificateNumber', label: 'Certificate Number', type: 'text', placeholder: 'e.g., PC-2025-XXXX', required: true },
+   113→      { key: 'issuingAuthority', label: 'Issuing Authority', type: 'text', placeholder: 'e.g., Powai Police Station', required: true },
+   114→      { key: 'issueDate', label: 'Issue Date', type: 'date', required: true },
+   115→    ],
+   116→    maxFileSize: 5 * 1024 * 1024,
+   117→    allowedTypes: ['image/jpeg', 'image/png', 'image/heic', 'application/pdf'],
+   118→  },
+   119→  medical: {
+   120→    title: 'Medical Fitness Certificate',
+   121→    description: 'Upload your medical fitness certificate from a registered medical practitioner.',
+   122→    icon: Heart,
+   123→    mandatory: false,
+   124→    fields: [
+   125→      { key: 'doctorName', label: 'Doctor Name', type: 'text', placeholder: 'Dr. ...', required: true },
+   126→      { key: 'clinicName', label: 'Clinic / Hospital Name', type: 'text', placeholder: 'Enter clinic name', required: true },
+   127→      { key: 'certificateDate', label: 'Certificate Date', type: 'date', required: true },
+   128→    ],
+   129→    maxFileSize: 5 * 1024 * 1024,
+   130→    allowedTypes: ['image/jpeg', 'image/png', 'image/heic', 'application/pdf'],
+   131→  },
+   132→  video: {
+   133→    title: 'Video KYC Verification',
+   134→    description: 'Submit your ID proof for video KYC verification. Our team will schedule a video call.',
+   135→    icon: UserCircle,
+   136→    mandatory: false,
+   137→    fields: [
+   138→      { key: 'idType', label: 'ID Type', type: 'select', options: ['PAN Card', 'Voter ID', 'Driving License', 'Passport'], required: true },
+   139→      { key: 'idNumber', label: 'ID Number', type: 'text', placeholder: 'Enter ID number', required: true },
+   140→      { key: 'preferredDate', label: 'Preferred Date for Video Call', type: 'date', required: true },
+   141→    ],
+   142→    maxFileSize: 5 * 1024 * 1024,
+   143→    allowedTypes: ['image/jpeg', 'image/png', 'image/heic', 'application/pdf'],
+   144→  },
+   145→};
+   146→
+   147→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   148→
+   149→function getInitialDocs(): VerificationDoc[] {
+   150→  return [
+   151→    {
+   152→      id: 'v-aadhaar',
+   153→      type: 'aadhaar',
+   154→      status: mockCaregiver.aadhaarVerified ? 'approved' : 'not_started',
+   155→      attempts: [],
+   156→      currentDraft: { documents: [], formFields: {} },
+   157→    },
+   158→    {
+   159→      id: 'v-police',
+   160→      type: 'police',
+   161→      status: mockCaregiver.policeVerified ? 'approved' : 'not_started',
+   162→      attempts: [],
+   163→      currentDraft: { documents: [], formFields: {} },
+   164→    },
+   165→    {
+   166→      id: 'v-medical',
+   167→      type: 'medical',
+   168→      status: mockCaregiver.medicalFitness ? 'approved' : 'not_started',
+   169→      attempts: [],
+   170→      currentDraft: { documents: [], formFields: {} },
+   171→    },
+   172→    {
+   173→      id: 'v-video',
+   174→      type: 'video',
+   175→      status: mockCaregiver.videoVerified ? 'approved' : 'not_started',
+   176→      attempts: [],
+   177→      currentDraft: { documents: [], formFields: {} },
+   178→    },
+   179→  ];
+   180→}
+   181→
+   182→function loadDocsFromStorage(): VerificationDoc[] {
+   183→  try {
+   184→    const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
+   185→    if (stored) {
+   186→      const parsed = JSON.parse(stored);
+   187→      if (Array.isArray(parsed) && parsed.length === 4) return parsed;
+   188→    }
+   189→  } catch {
+   190→    // fall through
+   191→  }
+   192→  return getInitialDocs();
+   193→}
+   194→
+   195→function saveDocsToStorage(docs: VerificationDoc[]) {
+   196→  localStorage.setItem(VERIFICATION_STORAGE_KEY, JSON.stringify(docs));
+   197→}
+   198→
+   199→function getStatusDisplay(status: VerificationStatus) {
+   200→  switch (status) {
+   201→    case 'approved':
+   202→      return { label: 'Verified', color: 'text-emerald-700', bg: 'bg-emerald-100', badgeBg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle };
+   203→    case 'submitted':
+   204→      return { label: 'Submitted', color: 'text-blue-700', bg: 'bg-blue-100', badgeBg: 'bg-blue-50 border-blue-200', icon: Send };
+   205→    case 'under_review':
+   206→      return { label: 'Under Review', color: 'text-blue-700', bg: 'bg-blue-100', badgeBg: 'bg-blue-50 border-blue-200', icon: RefreshCw };
+   207→    case 'rejected':
+   208→      return { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100', badgeBg: 'bg-red-50 border-red-200', icon: XCircle };
+   209→    case 'max_attempts_reached':
+   210→      return { label: 'Locked', color: 'text-gray-600', bg: 'bg-gray-100', badgeBg: 'bg-gray-50 border-gray-200', icon: Ban };
+   211→    default:
+   212→      return { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-100', badgeBg: 'bg-amber-50 border-amber-200', icon: Clock };
+   213→  }
+   214→}
+   215→
+   216→// ─── Component ────────────────────────────────────────────────────────────────
+   217→
+   218→export default function VerificationPage({ onComplete, optionalMode = false }: VerificationPageProps) {
+   219→  const [docs, setDocs] = useState<VerificationDoc[]>(loadDocsFromStorage);
+   220→  const [activeType, setActiveType] = useState<VerificationType | null>(null);
+   221→  const [formFields, setFormFields] = useState<Record<string, string>>({});
+   222→  const [uploadedFiles, setUploadedFiles] = useState<Array<{ id: string; name: string; size: number; type: string }>>([]);
+   223→  const [submitting, setSubmitting] = useState(false);
+   224→  const [submittedType, setSubmittedType] = useState<VerificationType | null>(null);
+   225→  const [reviewingType, setReviewingType] = useState<VerificationType | null>(null);
+   226→  const [calendarOpen, setCalendarOpen] = useState<Record<string, boolean>>({});
+   227→  const [approvingType, setApprovingType] = useState<VerificationType | null>(null);
+   228→  const reviewTimersRef = useRef<Record<string, NodeJS.Timeout[]>>({});
+   229→
+   230→  const currentYear = new Date().getFullYear();
+   231→
+   232→  // Clean up timers on unmount
+   233→  useEffect(() => {
+   234→    return () => {
+   235→      Object.values(reviewTimersRef.current).forEach((timers) => {
+   236→        timers.forEach(clearTimeout);
+   237→      });
+   238→    };
+   239→  }, []);
+   240→
+   241→  // Persist docs to localStorage whenever they change
+   242→  const updateDocs = useCallback((updater: (prev: VerificationDoc[]) => VerificationDoc[]) => {
+   243→    setDocs((prev) => {
+   244→      const updated = updater(prev);
+   245→      saveDocsToStorage(updated);
+   246→      return updated;
+   247→    });
+   248→  }, []);
+   249→
+   250→  // ─── Backend Review Simulation ───────────────────────────────────────────
+   251→
+   252→  const startReviewSimulation = useCallback((type: VerificationType, attemptNumber: number) => {
+   253→    // Clear any existing timers for this type
+   254→    if (reviewTimersRef.current[type]) {
+   255→      reviewTimersRef.current[type].forEach(clearTimeout);
+   256→    }
+   257→    reviewTimersRef.current[type] = [];
+   258→
+   259→    const doc = docs.find((d) => d.type === type);
+   260→    if (!doc) return;
+   261→
+   262→    // Timer 1: After 3s → under_review
+   263→    const t1 = setTimeout(() => {
+   264→      setReviewingType(type);
+   265→      updateDocs((prev) =>
+   266→        prev.map((d) =>
+   267→          d.type === type ? { ...d, status: 'under_review' as VerificationStatus } : d
+   268→        )
+   269→      );
+   270→    }, 3000);
+   271→
+   272→    // Timer 2: After 5-7s total → resolve
+   273→    const resolveDelay = 5000 + Math.random() * 2000;
+   274→    const t2 = setTimeout(() => {
+   275→      const currentDoc = docs.find((d) => d.type === type);
+   276→      if (!currentDoc) return;
+   277→
+   278→      const currentAttempts = currentDoc.attempts.length;
+   279→      let willApprove: boolean;
+   280→
+   281→      if (type === 'aadhaar') {
+   282→        // Aadhaar always approve on first attempt (demo-friendly)
+   283→        willApprove = true;
+   284→      } else {
+   285→        // Others: 60% reject on attempt 1, 30% on attempt 2, always approve on attempt 3
+   286→        if (attemptNumber === 1) {
+   287→          willApprove = Math.random() < 0.4;
+   288→        } else if (attemptNumber === 2) {
+   289→          willApprove = Math.random() < 0.7;
+   290→        } else {
+   291→          willApprove = true;
+   292→        }
+   293→      }
+   294→
+   295→      if (willApprove) {
+   296→        // Approve
+   297→        setApprovingType(type);
+   298→        updateDocs((prev) =>
+   299→          prev.map((d) => {
+   300→            if (d.type !== type) return d;
+   301→            return {
+   302→              ...d,
+   303→              status: 'approved' as VerificationStatus,
+   304→              attempts: d.attempts.map((a) =>
+   305→                a.attemptNumber === attemptNumber
+   306→                  ? { ...a, status: 'approved' as const, reviewedAt: new Date().toISOString() }
+   307→                  : a
+   308→              ),
+   309→            };
+   310→          })
+   311→        );
+   312→        setReviewingType(null);
+   313→
+   314→        // If Aadhaar approved and onComplete exists, call it after delay
+   315→        if (type === 'aadhaar' && onComplete) {
+   316→          setTimeout(() => {
+   317→            setApprovingType(null);
+   318→            setSubmittedType(null);
+   319→            onComplete();
+   320→          }, 1000);
+   321→        } else {
+   322→          // For optional: show success briefly, then allow going back
+   323→          setTimeout(() => {
+   324→            setApprovingType(null);
+   325→            setSubmittedType(null);
+   326→            setActiveType(null);
+   327→          }, 2000);
+   328→        }
+   329→      } else {
+   330→        // Reject
+   331→        const reason = REJECTION_REASONS[Math.floor(Math.random() * REJECTION_REASONS.length)];
+   332→        updateDocs((prev) =>
+   333→          prev.map((d) => {
+   334→            if (d.type !== type) return d;
+   335→            const updatedAttempts = d.attempts.map((a) =>
+   336→              a.attemptNumber === attemptNumber
+   337→                ? { ...a, status: 'rejected' as const, reviewedAt: new Date().toISOString(), rejectionReason: reason }
+   338→                : a
+   339→            );
+   340→            // Check if max attempts reached
+   341→            const isMaxAttempts = updatedAttempts.length >= MAX_ATTEMPTS && updatedAttempts[updatedAttempts.length - 1].status === 'rejected';
+   342→            return {
+   343→              ...d,
+   344→              status: isMaxAttempts ? ('max_attempts_reached' as VerificationStatus) : ('rejected' as VerificationStatus),
+   345→              attempts: updatedAttempts,
+   346→              currentDraft: { documents: [], formFields: {} },
+   347→            };
+   348→          })
+   349→        );
+   350→        setReviewingType(null);
+   351→        // Transition from submitted view to allow re-upload
+   352→        setTimeout(() => {
+   353→          setSubmittedType(null);
+   354→        }, 300);
+   355→      }
+   356→    }, resolveDelay);
+   357→
+   358→    reviewTimersRef.current[type] = [t1, t2];
+   359→  }, [docs, onComplete, updateDocs]);
+   360→
+   361→  // ─── Handlers ────────────────────────────────────────────────────────────
+   362→
+   363→  const handleSelectType = (type: VerificationType) => {
+   364→    const doc = docs.find((d) => d.type === type);
+   365→    if (!doc) return;
+   366→    // If approved or max_attempts_reached, don't open form (but allow viewing)
+   367→    setActiveType(type);
+   368→    // Restore draft if exists, otherwise use empty
+   369→    setFormFields(doc.currentDraft?.formFields || {});
+   370→    setUploadedFiles(doc.currentDraft?.documents || []);
+   371→    setSubmittedType(null);
+   372→  };
+   373→
+   374→  const handleBack = () => {
+   375→    // Save draft
+   376→    if (activeType) {
+   377→      updateDocs((prev) =>
+   378→        prev.map((d) =>
+   379→          d.type === activeType
+   380→            ? { ...d, currentDraft: { documents: uploadedFiles, formFields } }
+   381→            : d
+   382→        )
+   383→      );
+   384→    }
+   385→    // Clean up timers for this type if we navigate back
+   386→    if (activeType && reviewTimersRef.current[activeType]) {
+   387→      // Don't clear if review is in progress (submittedType or reviewingType is set)
+   388→      if (!submittedType && !reviewingType) {
+   389→        reviewTimersRef.current[activeType].forEach(clearTimeout);
+   390→        delete reviewTimersRef.current[activeType];
+   391→      }
+   392→    }
+   393→    setActiveType(null);
+   394→    setFormFields({});
+   395→    setUploadedFiles([]);
+   396→    setSubmittedType(null);
+   397→    setReviewingType(null);
+   398→  };
+   399→
+   400→  const fileInputRef = useRef<HTMLInputElement | null>(null);
+   401→
+   402→  const handleFileUploadClick = () => {
+   403→    fileInputRef.current?.click();
+   404→  };
+   405→
+   406→  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+   407→    const files = e.target.files;
+   408→    if (!files || files.length === 0) return;
+   409→
+   410→    const config = activeType ? verificationConfig[activeType] : null;
+   411→    const newFiles: Array<{ id: string; name: string; size: number; type: string }> = [];
+   412→
+   413→    for (let i = 0; i < files.length; i++) {
+   414→      const file = files[i];
+   415→      // Validate file type
+   416→      if (config && !config.allowedTypes.includes(file.type)) {
+   417→        alert(`Invalid file type: ${file.name}. Allowed: JPG, PNG, HEIC, PDF`);
+   418→        continue;
+   419→      }
+   420→      // Validate file size
+   421→      if (config && file.size > config.maxFileSize) {
+   422→        alert(`File too large: ${file.name}. Max ${config.maxFileSize / 1024 / 1024}MB`);
+   423→        continue;
+   424→      }
+   425→      newFiles.push({
+   426→        id: `file-${Date.now()}-${i}`,
+   427→        name: file.name,
+   428→        size: file.size,
+   429→        type: file.type,
+   430→      });
+   431→    }
+   432→
+   433→    if (newFiles.length > 0) {
+   434→      setUploadedFiles((prev) => [...prev, ...newFiles]);
+   435→    }
+   436→
+   437→    // Reset input so same file can be re-selected
+   438→    e.target.value = '';
+   439→  };
+   440→
+   441→  const handleRemoveFile = (fileId: string) => {
+   442→    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+   443→  };
+   444→
+   445→  const handleSubmit = async () => {
+   446→    if (!activeType) return;
+   447→    setSubmitting(true);
+   448→
+   449→    // Simulate submission delay
+   450→    await new Promise((resolve) => setTimeout(resolve, 1500));
+   451→
+   452→    const doc = docs.find((d) => d.type === activeType);
+   453→    const nextAttemptNumber = (doc?.attempts?.length || 0) + 1;
+   454→
+   455→    const newAttempt = {
+   456→      attemptNumber: nextAttemptNumber,
+   457→      submittedAt: new Date().toISOString(),
+   458→      documents: [...uploadedFiles],
+   459→      formFields: { ...formFields },
+   460→      status: 'submitted' as const,
+   461→    };
+   462→
+   463→    updateDocs((prev) =>
+   464→      prev.map((d) => {
+   465→        if (d.type !== activeType) return d;
+   466→        return {
+   467→          ...d,
+   468→          status: 'submitted' as VerificationStatus,
+   469→          attempts: [...d.attempts, newAttempt],
+   470→          currentDraft: { documents: [], formFields: {} },
+   471→        };
+   472→      })
+   473→    );
+   474→
+   475→    setSubmitting(false);
+   476→    setSubmittedType(activeType);
+   477→
+   478→    // Start the backend review simulation
+   479→    startReviewSimulation(activeType, nextAttemptNumber);
+   480→  };
+   481→
+   482→  // ─── Derived State ────────────────────────────────────────────────────────
+   483→
+   484→  const aadhaarDoc = docs.find((d) => d.type === 'aadhaar');
+   485→  const aadhaarApproved = aadhaarDoc?.status === 'approved';
+   486→
+   487→  // ─── View 1: Overview ────────────────────────────────────────────────────
+   488→
+   489→  if (!activeType) {
+   490→    const allTypes = (Object.keys(verificationConfig) as VerificationType[]);
+   491→    const mandatoryTypes = allTypes.filter((t) => verificationConfig[t].mandatory);
+   492→    const optionalTypes = allTypes.filter((t) => !verificationConfig[t].mandatory);
+   493→    const optionalPending = optionalTypes.filter((t) => {
+   494→      const doc = docs.find((d) => d.type === t);
+   495→      return doc?.status !== 'approved' && doc?.status !== 'max_attempts_reached';
+   496→    });
+   497→
+   498→    return (
+   499→      <div className="min-h-screen bg-gray-50 flex flex-col">
+   500→        <div className="flex-1 flex flex-col items-center p-4 pt-8">
+   501→          <div className="w-full max-w-2xl space-y-6">
+   502→            {/* Header */}
+   503→            <div className="text-center space-y-3">
+   504→              <div className="inline-flex items-center justify-center size-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white mb-2">
+   505→                <Shield className="size-8" />
+   506→              </div>
+   507→              <h1 className="text-2xl font-bold text-gray-900">
+   508→                {aadhaarApproved ? 'Document Verification' : 'Complete Your Verification'}
+   509→              </h1>
+   510→              <p className="text-sm text-gray-500 max-w-md mx-auto">
+   511→                {aadhaarApproved
+   512→                  ? 'Your identity is verified! Submit remaining documents to build trust with families and unlock more assignments.'
+   513→                  : 'Welcome to Nurturee! To start accepting assignments, please verify your identity. Aadhaar verification is mandatory.'}
+   514→              </p>
+   515→            </div>
+   516→
+   517→            {/* Aadhaar Success Banner (shown after approval) */}
+   518→            {aadhaarApproved && (
+   519→              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 flex items-center gap-3">
+   520→                <div className="size-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+   521→                  <CheckCircle className="size-5 text-emerald-600" />
+   522→                </div>
+   523→                <div>
+   524→                  <p className="text-sm font-semibold text-emerald-800">Identity Verified</p>
+   525→                  <p className="text-xs text-emerald-600 mt-0.5">
+   526→                    Your Aadhaar has been verified. You can now access the dashboard and submit optional documents at any time.
+   527→                  </p>
+   528→                </div>
+   529→              </div>
+   530→            )}
+   531→
+   532→            {/* ─── Mandatory Section ─── */}
+   533→            {!aadhaarApproved && (
+   534→              <div className="space-y-3">
+   535→                <div className="flex items-center gap-2">
+   536→                  <Badge className="bg-red-50 text-red-600 border border-red-200 px-2.5 py-0.5 text-xs font-medium">
+   537→                    Step 1 — Mandatory
+   538→                  </Badge>
+   539→                  <div className="flex-1 h-px bg-gray-200" />
+   540→                </div>
+   541→                <p className="text-xs text-gray-500">
+   542→                  Aadhaar verification is required before you can access the dashboard. Please upload your Aadhaar card.
+   543→                </p>
+   544→                {mandatoryTypes.map((type) => {
+   545→                  const config = verificationConfig[type];
+   546→                  const Icon = config.icon;
+   547→                  const doc = docs.find((d) => d.type === type);
+   548→                  const statusDisplay = getStatusDisplay(doc?.status || 'not_started');
+   549→                  const StatusIcon = statusDisplay.icon;
+   550→                  const isReviewing = reviewingType === type;
+   551→
+   552→                  return (
+   553→                    <button
+   554→                      key={type}
+   555→                      onClick={() => handleSelectType(type)}
+   556→                      className={`rounded-xl border bg-white p-4 flex items-center gap-3 text-left hover:shadow-sm hover:border-blue-300 transition-all cursor-pointer w-full group ${
+   557→                        doc?.status === 'approved' ? 'opacity-70 border-emerald-200' : 'border-blue-200 bg-blue-50/30 ring-1 ring-blue-100'
+   558→                      }`}
+   559→                    >
+   560→                      <div className={`size-10 rounded-lg flex items-center justify-center ${statusDisplay.bg}`}>
+   561→                        {isReviewing ? (
+   562→                          <Loader2 className={`size-5 ${statusDisplay.color} animate-spin`} />
+   563→                        ) : (
+   564→                          <Icon className={`size-5 ${statusDisplay.color}`} />
+   565→                        )}
+   566→                      </div>
+   567→                      <div className="flex-1 min-w-0">
+   568→                        <div className="flex items-center gap-1.5">
+   569→                          <p className="text-sm font-semibold text-blue-900 group-hover:text-blue-700 transition-colors">
+   570→                            {config.title}
+   571→                          </p>
+   572→                          {doc?.status !== 'approved' && (
+   573→                            <Badge className="bg-red-50 text-red-600 border border-red-200 text-[10px] px-1.5 py-0 leading-none">Required</Badge>
+   574→                          )}
+   575→                          {doc?.status === 'approved' && (
+   576→                            <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200 bg-emerald-50 px-1.5 py-0 leading-none">
+   577→                              <CheckCircle className="size-2.5 mr-0.5" />
+   578→                              Verified
+   579→                            </Badge>
+   580→                          )}
+   581→                        </div>
+   582→                        <div className="flex items-center gap-1 mt-0.5">
+   583→                          <StatusIcon className={`size-3.5 ${statusDisplay.color}`} />
+   584→                          <span className={`text-xs font-medium ${statusDisplay.color}`}>
+   585→                            {isReviewing ? 'Reviewing...' : statusDisplay.label}
+   586→                          </span>
+   587→                        </div>
+   588→                        {!isReviewing && doc?.status !== 'approved' && (
+   589→                          <p className="text-[11px] text-gray-400 mt-1">Tap to upload and submit for verification</p>
+   590→                        )}
+   591→                      </div>
+   592→                      <ArrowLeft className="size-4 text-gray-300 group-hover:text-blue-400 transition-colors shrink-0 rotate-180" />
+   593→                    </button>
+   594→                  );
+   595→                })}
+   596→              </div>
+   597→            )}
+   598→
+   599→            {/* ─── Optional Section ─── */}
+   600→            {aadhaarApproved && optionalTypes.length > 0 && (
+   601→              <div className="space-y-3">
+   602→                <div className="flex items-center gap-2">
+   603→                  <Badge className="bg-blue-50 text-blue-600 border border-blue-200 px-2.5 py-0.5 text-xs font-medium">
+   604→                    Step 2 — Optional
+   605→                  </Badge>
+   606→                  <div className="flex-1 h-px bg-gray-200" />
+   607→                  <span className="text-xs text-gray-400">{optionalPending.length} remaining</span>
+   608→                </div>
+   609→                <p className="text-xs text-gray-500">
+   610→                  These documents help build trust with families and can increase your chances of getting assignments. You can submit them anytime.
+   611→                </p>
+   612→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   613→                  {optionalTypes.map((type) => {
+   614→                    const config = verificationConfig[type];
+   615→                    const Icon = config.icon;
+   616→                    const doc = docs.find((d) => d.type === type);
+   617→                    const statusDisplay = getStatusDisplay(doc?.status || 'not_started');
+   618→                    const StatusIcon = statusDisplay.icon;
+   619→                    const isReviewing = reviewingType === type;
+   620→
+   621→                    return (
+   622→                      <button
+   623→                        key={type}
+   624→                        onClick={() => handleSelectType(type)}
+   625→                        className={`rounded-xl border bg-white p-4 flex items-center gap-3 text-left hover:shadow-sm hover:border-gray-200 transition-all cursor-pointer w-full group ${
+   626→                          doc?.status === 'approved' ? 'opacity-60 border-gray-100' : 'border-gray-100'
+   627→                        }`}
+   628→                      >
+   629→                        <div className={`size-10 rounded-lg flex items-center justify-center ${statusDisplay.bg}`}>
+   630→                          {isReviewing ? (
+   631→                            <Loader2 className={`size-5 ${statusDisplay.color} animate-spin`} />
+   632→                          ) : (
+   633→                            <Icon className={`size-5 ${statusDisplay.color}`} />
+   634→                          )}
+   635→                        </div>
+   636→                        <div className="flex-1 min-w-0">
+   637→                          <div className="flex items-center gap-1.5">
+   638→                            <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors">
+   639→                              {config.title}
+   640→                            </p>
+   641→                            {doc?.status === 'approved' && (
+   642→                              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200 bg-emerald-50 px-1.5 py-0 leading-none">
+   643→                                <CheckCircle className="size-2.5 mr-0.5" />
+   644→                                Done
+   645→                              </Badge>
+   646→                            )}
+   647→                          </div>
+   648→                          <div className="flex items-center gap-1 mt-0.5">
+   649→                            <StatusIcon className={`size-3.5 ${statusDisplay.color}`} />
+   650→                            <span className={`text-xs font-medium ${statusDisplay.color}`}>
+   651→                              {isReviewing ? 'Reviewing...' : statusDisplay.label}
+   652→                            </span>
+   653→                          </div>
+   654→                        </div>
+   655→                        <ArrowLeft className="size-4 text-gray-300 group-hover:text-blue-400 transition-colors shrink-0 rotate-180" />
+   656→                      </button>
+   657→                    );
+   658→                  })}
+   659→                </div>
+   660→              </div>
+   661→            )}
+   662→
+   663→            {/* Locked verifications warning */}
+   664→            {(() => {
+   665→              const lockedCount = docs.filter((d) => d.status === 'max_attempts_reached').length;
+   666→              if (lockedCount === 0) return null;
+   667→              return (
+   668→                <div className="rounded-xl bg-red-50 border border-red-100 p-3.5 flex items-start gap-2.5">
+   669→                  <Ban className="size-4 text-red-500 mt-0.5 shrink-0" />
+   670→                  <div>
+   671→                    <p className="text-xs font-medium text-red-800">
+   672→                      {lockedCount} verification{lockedCount > 1 ? 's' : ''} permanently locked
+   673→                    </p>
+   674→                    <p className="text-xs text-red-600 mt-0.5">
+   675→                      Maximum upload attempts reached. Please contact Nurturee support at{' '}
+   676→                      <span className="font-medium">support@nurturee.com</span> for assistance.
+   677→                    </p>
+   678→                  </div>
+   679→                </div>
+   680→              );
+   681→            })()}
+   682→
+   683→            {/* Active reviews info */}
+   684→            {(() => {
+   685→              const activeCount = docs.filter((d) => d.status === 'submitted' || d.status === 'under_review').length;
+   686→              if (activeCount === 0) return null;
+   687→              return (
+   688→                <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3.5 flex items-start gap-2.5">
+   689→                  <Send className="size-4 text-indigo-500 mt-0.5 shrink-0" />
+   690→                  <div>
+   691→                    <p className="text-xs font-medium text-indigo-800">
+   692→                      {activeCount} document{activeCount > 1 ? 's' : ''} submitted for admin review
+   693→                    </p>
+   694→                    <p className="text-xs text-indigo-600 mt-0.5">
+   695→                      Our admin team will review and verify your documents within 24-48 hours. If rejected, you may re-upload (up to 3 attempts per document).
+   696→                    </p>
+   697→                  </div>
+   698→                </div>
+   699→              );
+   700→            })()}
+   701→          </div>
+   702→        </div>
+   703→
+   704→        {/* Sticky Bottom Bar */}
+   705→        {aadhaarApproved && onComplete && (
+   706→          <div className="sticky bottom-0 bg-white/80 backdrop-blur-lg border-t border-gray-200 p-4">
+   707→            <div className="w-full max-w-2xl mx-auto">
+   708→              <Button
+   709→                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-12 text-sm font-medium rounded-xl shadow-md"
+   710→                onClick={onComplete}
+   711→              >
+   712→                <Sparkles className="size-4 mr-2" />
+   713→                {optionalMode ? 'Back to Profile' : 'Go to Dashboard'}
+   714→              </Button>
+   715→            </div>
+   716→          </div>
+   717→        )}
+   718→      </div>
+   719→    );
+   720→  }
+   721→
+   722→  // ─── View 2: Upload Form ────────────────────────────────────────────────
+   723→
+   724→  const config = verificationConfig[activeType];
+   725→  const Icon = config.icon;
+   726→  const doc = docs.find((d) => d.type === activeType);
+   727→  const attemptsUsed = doc?.attempts?.length || 0;
+   728→  const nextAttempt = attemptsUsed + 1;
+   729→  const isSubmitted = submittedType === activeType;
+   730→  const isReviewing = reviewingType === activeType;
+   731→  const isApproved = approvingType === activeType;
+   732→  const isLocked = doc?.status === 'max_attempts_reached';
+   733→  const isRejected = doc?.status === 'rejected';
+   734→  const lastRejectionReason = doc?.attempts?.length
+   735→    ? doc.attempts[doc.attempts.length - 1]?.rejectionReason
+   736→    : null;
+   737→
+   738→  const allFieldsFilled = config.fields
+   739→    .filter((f) => f.required)
+   740→    .every((f) => formFields[f.key]?.trim());
+   741→
+   742→  const isSubmitDisabled = !allFieldsFilled || uploadedFiles.length === 0 || submitting || isSubmitted || isReviewing || isLocked || isApproved;
+   743→
+   744→  return (
+   745→    <div className="min-h-screen bg-gray-50">
+   746→      {/* Sticky Top Bar */}
+   747→      <div className="sticky top-0 z-30 bg-white border-b border-gray-200">
+   748→        <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
+   749→          <button
+   750→            onClick={handleBack}
+   751→            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+   752→          >
+   753→            <ArrowLeft className="size-4" />
+   754→            {optionalMode ? 'Back to Profile' : 'Back'}
+   755→          </button>
+   756→          <div className="flex-1 flex items-center gap-2">
+   757→            <Icon className="size-5 text-blue-600" />
+   758→            <h1 className="text-sm font-semibold text-gray-900">{config.title}</h1>
+   759→          </div>
+   760→          {config.mandatory && (
+   761→            <Badge className="bg-red-50 text-red-600 border border-red-200 text-[10px]">Required</Badge>
+   762→          )}
+   763→        </div>
+   764→      </div>
+   765→
+   766→      <div className="max-w-2xl mx-auto p-4 space-y-5 pb-8">
+   767→        {/* Approved State */}
+   768→        {isApproved && (
+   769→          <Card className="border-emerald-200 bg-emerald-50/50">
+   770→            <CardContent className="p-6 text-center">
+   771→              <div className="inline-flex items-center justify-center size-12 rounded-full bg-emerald-100 mb-3">
+   772→                <CheckCircle className="size-6 text-emerald-600" />
+   773→              </div>
+   774→              <h2 className="text-lg font-bold text-emerald-900">Verification Approved!</h2>
+   775→              <p className="text-sm text-emerald-600 mt-1">
+   776→                {activeType === 'aadhaar'
+   777→                  ? 'Redirecting to your dashboard...'
+   778→                  : 'Your document has been verified successfully.'}
+   779→              </p>
+   780→              {activeType !== 'aadhaar' && (
+   781→                <div className="mt-3">
+   782→                  <Loader2 className="size-4 text-emerald-500 animate-spin mx-auto" />
+   783→                </div>
+   784→              )}
+   785→            </CardContent>
+   786→          </Card>
+   787→        )}
+   788→
+   789→        {/* Submitted State (waiting for review) */}
+   790→        {isSubmitted && !isApproved && (
+   791→          <Card className="border-blue-200 bg-blue-50/50">
+   792→            <CardContent className="p-6 text-center">
+   793→              <div className="inline-flex items-center justify-center size-12 rounded-full bg-blue-100 mb-3">
+   794→                <Send className="size-6 text-blue-600" />
+   795→              </div>
+   796→              <h2 className="text-lg font-bold text-blue-900">Document Submitted!</h2>
+   797→              <div className="flex items-center justify-center gap-2 mt-2">
+   798→                <Loader2 className="size-4 text-blue-500 animate-spin" />
+   799→                <p className="text-sm text-blue-600">Under Review...</p>
+   800→              </div>
+   801→              <p className="text-xs text-blue-400 mt-1">This usually takes a few seconds in demo mode</p>
+   802→            </CardContent>
+   803→          </Card>
+   804→        )}
+   805→
+   806→        {/* Locked State (max attempts reached) */}
+   807→        {isLocked && !isSubmitted && (
+   808→          <Card className="border-red-200 bg-red-50/50">
+   809→            <CardContent className="p-6 text-center">
+   810→              <div className="inline-flex items-center justify-center size-12 rounded-full bg-red-100 mb-3">
+   811→                <Ban className="size-6 text-red-600" />
+   812→              </div>
+   813→              <h2 className="text-lg font-bold text-red-900">Maximum Attempts Reached</h2>
+   814→              <p className="text-sm text-red-600 mt-2">
+   815→                You have used all 3 verification attempts for this document. Please contact support for assistance.
+   816→              </p>
+   817→              <Separator className="my-4" />
+   818→              <div className="flex items-center justify-center gap-2 text-xs text-red-500">
+   819→                <AlertCircle className="size-3.5" />
+   820→                <span>Contact Nurturee support at support@nurturee.com</span>
+   821→              </div>
+   822→            </CardContent>
+   823→          </Card>
+   824→        )}
+   825→
+   826→        {/* Rejection Alert */}
+   827→        {isRejected && !isSubmitted && !isLocked && (
+   828→          <Card className="border-red-200 bg-red-50/50">
+   829→            <CardContent className="p-4">
+   830→              <div className="flex items-start gap-3">
+   831→                <div className="size-8 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+   832→                  <XCircle className="size-4 text-red-600" />
+   833→                </div>
+   834→                <div className="flex-1">
+   835→                  <p className="text-sm font-semibold text-red-900">Verification Rejected</p>
+   836→                  <p className="text-sm text-red-700 mt-1">{lastRejectionReason}</p>
+   837→                  <p className="text-xs text-red-500 mt-2 font-medium">
+   838→                    Re-upload (Attempt {nextAttempt} of {MAX_ATTEMPTS})
+   839→                  </p>
+   840→                </div>
+   841→              </div>
+   842→            </CardContent>
+   843→          </Card>
+   844→        )}
+   845→
+   846→        {/* Description Card with Attempt Tracker */}
+   847→        {!isLocked && !isApproved && (
+   848→          <Card>
+   849→            <CardContent className="p-4">
+   850→              <p className="text-sm text-gray-600">{config.description}</p>
+   851→              <div className="flex items-center gap-2 mt-3">
+   852→                {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
+   853→                  <div
+   854→                    key={i}
+   855→                    className={`size-2.5 rounded-full transition-colors ${
+   856→                      i < attemptsUsed
+   857→                        ? 'bg-blue-500'
+   858→                        : 'bg-gray-200'
+   859→                    }`}
+   860→                  />
+   861→                ))}
+   862→                <span className="text-xs text-gray-500 ml-1">
+   863→                  {attemptsUsed === 0
+   864→                    ? 'No attempts used'
+   865→                    : `${attemptsUsed} of ${MAX_ATTEMPTS} attempts used`}
+   866→                </span>
+   867→              </div>
+   868→            </CardContent>
+   869→          </Card>
+   870→        )}
+   871→
+   872→        {/* Form Fields — only when not locked and not in approved state */}
+   873→        {!isLocked && !isApproved && (
+   874→          <Card>
+   875→            <CardHeader className="pb-3">
+   876→              <CardTitle className="text-base font-semibold text-gray-900">
+   877→                Required Information
+   878→              </CardTitle>
+   879→            </CardHeader>
+   880→            <CardContent className="space-y-4">
+   881→              {config.fields.map((field) => {
+   882→                if (field.type === 'date') {
+   883→                  const dateValue = formFields[field.key] || '';
+   884→                  const parsedDate = dateValue ? (() => {
+   885→                    const parts = dateValue.split('/');
+   886→                    if (parts.length === 3) {
+   887→                      const [day, month, year] = parts.map(Number);
+   888→                      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+   889→                        return new Date(year, month - 1, day);
+   890→                      }
+   891→                    }
+   892→                    return undefined;
+   893→                  })() : undefined;
+   894→
+   895→                  return (
+   896→                    <div key={field.key} className="space-y-2">
+   897→                      <Label className="text-xs font-medium text-gray-500">
+   898→                        {field.label} {field.required && <span className="text-red-500">*</span>}
+   899→                      </Label>
+   900→                      <Popover
+   901→                        open={calendarOpen[field.key] || false}
+   902→                        onOpenChange={(open) => setCalendarOpen((prev) => ({ ...prev, [field.key]: open }))}
+   903→                      >
+   904→                        <PopoverTrigger asChild>
+   905→                          <Button
+   906→                            variant="outline"
+   907→                            className="w-full justify-start text-left font-normal text-sm"
+   908→                            disabled={isSubmitted || isReviewing}
+   909→                          >
+   910→                            <CalendarIcon className="mr-2 h-4 w-4" />
+   911→                            {dateValue || `Select ${field.label}`}
+   912→                          </Button>
+   913→                        </PopoverTrigger>
+   914→                        <PopoverContent className="w-auto p-0" align="start">
+   915→                          <Calendar
+   916→                            mode="single"
+   917→                            selected={parsedDate}
+   918→                            onSelect={(date) => {
+   919→                              if (date) {
+   920→                                const formatted = format(date, 'dd/MM/yyyy');
+   921→                                setFormFields((prev) => ({ ...prev, [field.key]: formatted }));
+   922→                                setCalendarOpen((prev) => ({ ...prev, [field.key]: false }));
+   923→                              }
+   924→                            }}
+   925→                            captionLayout="dropdown"
+   926→                            fromYear={1940}
+   927→                            toYear={currentYear}
+   928→                            defaultMonth={parsedDate || new Date(currentYear - 30, 0)}
+   929→                          />
+   930→                        </PopoverContent>
+   931→                      </Popover>
+   932→                    </div>
+   933→                  );
+   934→                }
+   935→
+   936→                if (field.type === 'select') {
+   937→                  return (
+   938→                    <div key={field.key} className="space-y-2">
+   939→                      <Label className="text-xs font-medium text-gray-500">
+   940→                        {field.label} {field.required && <span className="text-red-500">*</span>}
+   941→                      </Label>
+   942→                      <select
+   943→                        value={formFields[field.key] || ''}
+   944→                        onChange={(e) => setFormFields((prev) => ({ ...prev, [field.key]: e.target.value }))}
+   945→                        disabled={isSubmitted || isReviewing}
+   946→                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+   947→                      >
+   948→                        <option value="">Select {field.label}</option>
+   949→                        {field.options?.map((opt) => (
+   950→                          <option key={opt} value={opt}>{opt}</option>
+   951→                        ))}
+   952→                      </select>
+   953→                    </div>
+   954→                  );
+   955→                }
+   956→
+   957→                // text field
+   958→                return (
+   959→                  <div key={field.key} className="space-y-2">
+   960→                    <Label className="text-xs font-medium text-gray-500">
+   961→                      {field.label} {field.required && <span className="text-red-500">*</span>}
+   962→                    </Label>
+   963→                    <Input
+   964→                      type="text"
+   965→                      placeholder={field.placeholder}
+   966→                      value={formFields[field.key] || ''}
+   967→                      onChange={(e) => setFormFields((prev) => ({ ...prev, [field.key]: e.target.value }))}
+   968→                      disabled={isSubmitted || isReviewing}
+   969→                      className="text-sm"
+   970→                    />
+   971→                  </div>
+   972→                );
+   973→              })}
+   974→            </CardContent>
+   975→          </Card>
+   976→        )}
+   977→
+   978→        {/* Document Upload — only when not locked and not in approved state */}
+   979→        {!isLocked && !isApproved && (
+   980→          <Card>
+   981→            <CardHeader className="pb-3">
+   982→              <CardTitle className="text-base font-semibold text-gray-900">
+   983→                Upload Documents
+   984→              </CardTitle>
+   985→            </CardHeader>
+   986→            <CardContent className="space-y-4">
+   987→              <input
+   988→                ref={fileInputRef}
+   989→                type="file"
+   990→                accept="image/jpeg,image/png,image/heic,application/pdf"
+   991→                multiple
+   992→                className="sr-only"
+   993→                onChange={handleFileChange}
+   994→              />
+   995→              <div
+   996→                className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+   997→                  isSubmitted || isReviewing
+   998→                    ? 'border-gray-200 bg-gray-50/50 cursor-not-allowed'
+   999→                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 cursor-pointer'
+  1000→                }`}
+  1001→                onClick={() => {
+  1002→                  if (!isSubmitted && !isReviewing) handleFileUploadClick();
+  1003→                }}
+  1004→              >
+  1005→                <Upload className={`size-8 mx-auto mb-2 ${isSubmitted || isReviewing ? 'text-gray-300' : 'text-gray-400'}`} />
+  1006→                <p className="text-sm font-medium text-gray-700">
+  1007→                  {isSubmitted || isReviewing ? 'Upload locked during review' : 'Click to upload document'}
+  1008→                </p>
+  1009→                <p className="text-xs text-gray-400 mt-1">
+  1010→                  JPG, PNG, HEIC or PDF. Max {config.maxFileSize / 1024 / 1024}MB
+  1011→                </p>
+  1012→              </div>
+  1013→
+  1014→              {uploadedFiles.length > 0 && (
+  1015→                <div className="space-y-2">
+  1016→                  {uploadedFiles.map((file) => (
+  1017→                    <div key={file.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+  1018→                      <FileText className="size-4 text-gray-400" />
+  1019→                      <div className="flex-1 min-w-0">
+  1020→                        <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+  1021→                        <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(0)} KB</p>
+  1022→                      </div>
+  1023→                      {!(isSubmitted || isReviewing) && (
+  1024→                        <button
+  1025→                          onClick={() => handleRemoveFile(file.id)}
+  1026→                          className="text-gray-400 hover:text-red-500 transition-colors"
+  1027→                        >
+  1028→                          <XCircle className="size-4" />
+  1029→                        </button>
+  1030→                      )}
+  1031→                    </div>
+  1032→                  ))}
+  1033→                </div>
+  1034→              )}
+  1035→            </CardContent>
+  1036→          </Card>
+  1037→        )}
+  1038→
+  1039→        {/* Submit Button */}
+  1040→        {!isLocked && !isApproved && (
+  1041→          <Button
+  1042→            className={`w-full h-12 text-sm font-medium rounded-xl shadow-md ${
+  1043→              isSubmitDisabled
+  1044→                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+  1045→                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
+  1046→            }`}
+  1047→            disabled={isSubmitDisabled}
+  1048→            onClick={handleSubmit}
+  1049→          >
+  1050→            {submitting ? (
+  1051→              <>
+  1052→                <Loader2 className="size-4 mr-2 animate-spin" />
+  1053→                Submitting...
+  1054→              </>
+  1055→            ) : isRejected ? (
+  1056→              <>
+  1057→                <RefreshCw className="size-4 mr-2" />
+  1058→                Re-submit for Verification (Attempt {nextAttempt} of {MAX_ATTEMPTS})
+  1059→              </>
+  1060→            ) : (
+  1061→              <>
+  1062→                <Send className="size-4 mr-2" />
+  1063→                Submit for Verification
+  1064→              </>
+  1065→            )}
+  1066→          </Button>
+  1067→        )}
+  1068→      </div>
+  1069→    </div>
+  1070→  );
+  1071→}
+  1072→

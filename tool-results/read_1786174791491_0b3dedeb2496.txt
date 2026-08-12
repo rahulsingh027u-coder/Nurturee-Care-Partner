@@ -1,0 +1,998 @@
+    60→
+    61→// ── Helpers ──────────────────────────────────────────────────────────
+    62→const DEMO_OTP = '1234';
+    63→const RESEND_COOLDOWN = 30;
+    64→
+    65→function maskPhone(phone: string): string {
+    66→  const digits = phone.replace(/\D/g, '');
+    67→  if (digits.length < 4) return phone;
+    68→  const visibleStart = digits.slice(0, 2);
+    69→  const visibleEnd = digits.slice(-2);
+    70→  const masked = '*'.repeat(digits.length - 4);
+    71→  return `${visibleStart} ${masked} ${visibleEnd}`;
+    72→}
+    73→
+    74→function formatTime(time24: string): string {
+    75→  const [hours, minutes] = time24.split(':').map(Number);
+    76→  const period = hours >= 12 ? 'PM' : 'AM';
+    77→  const hours12 = hours % 12 || 12;
+    78→  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+    79→}
+    80→
+    81→function getFamilyLabel(category: string): string {
+    82→  return category === 'child_care'
+    83→    ? "Child's Parent"
+    84→    : "Elder's Family Member";
+    85→}
+    86→
+    87→// ── Component ────────────────────────────────────────────────────────
+    88→export default function ShiftCheckIn({
+    89→  shift,
+    90→  onStart,
+    91→  onCancel,
+    92→}: ShiftCheckInProps) {
+    93→  const [step, setStep] = useState<CheckInStep>('location_check');
+    94→  const [antiSpoofResult, setAntiSpoofResult] = useState<AntiSpoofResult | null>(null);
+    95→  const [selfieDataUrl, setSelfieDataUrl] = useState<string | null>(null);
+    96→  const [otp, setOtp] = useState(['', '', '', '']);
+    97→  const [resendTimer, setResendTimer] = useState(RESEND_COOLDOWN);
+    98→  const [error, setError] = useState('');
+    99→  const [copiedOtp, setCopiedOtp] = useState(false);
+   100→  const [deviceId, setDeviceId] = useState('');
+   101→  const [useDemoMode, setUseDemoMode] = useState(false);
+   102→
+   103→  const videoRef = useRef<HTMLVideoElement | null>(null);
+   104→  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+   105→  const streamRef = useRef<MediaStream | null>(null);
+   106→  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+   107→  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+   108→
+   109→  const familyLabel = getFamilyLabel(shift.serviceCategory);
+   110→
+   111→  // ── Generate device ID on mount ──────────────────────────────────
+   112→  useEffect(() => {
+   113→    setDeviceId(generateDeviceId());
+   114→  }, []);
+   115→
+   116→  // ── Cleanup camera stream on unmount ─────────────────────────────
+   117→  useEffect(() => {
+   118→    return () => {
+   119→      if (streamRef.current) {
+   120→        streamRef.current.getTracks().forEach((t) => t.stop());
+   121→      }
+   122→      if (timerRef.current) clearInterval(timerRef.current);
+   123→    };
+   124→  }, []);
+   125→
+   126→  // ── Resend countdown ───────────────────────────────────────────────
+   127→  useEffect(() => {
+   128→    if (step !== 'otp_enter' || resendTimer <= 0) return;
+   129→    timerRef.current = setInterval(() => {
+   130→      setResendTimer((prev) => {
+   131→        if (prev <= 1) {
+   132→          if (timerRef.current) clearInterval(timerRef.current);
+   133→          return 0;
+   134→        }
+   135→        return prev - 1;
+   136→      });
+   137→    }, 1000);
+   138→    return () => {
+   139→      if (timerRef.current) clearInterval(timerRef.current);
+   140→    };
+   141→  }, [step, resendTimer]);
+   142→
+   143→  // ── Reset OTP inputs ──────────────────────────────────────────────
+   144→  useEffect(() => {
+   145→    if (step === 'otp_enter') {
+   146→      setOtp(['', '', '', '']);
+   147→      setError('');
+   148→      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+   149→    }
+   150→  }, [step]);
+   151→
+   152→  // ── Step 1: Location Verification ──────────────────────────────────
+   153→  const startLocationCheck = useCallback(async () => {
+   154→    setStep('location_check');
+   155→    setError('');
+   156→
+   157→    try {
+   158→      if (useDemoMode) {
+   159→        // Demo mode — bypass real checks
+   160→        await new Promise((r) => setTimeout(r, 2500));
+   161→        const demoResult = runDemoAntiSpoofCheck();
+   162→        setAntiSpoofResult(demoResult);
+   163→        setStep('location_passed');
+   164→        return;
+   165→      }
+   166→
+   167→      const { result } = await runAntiSpoofCheck();
+   168→      setAntiSpoofResult(result);
+   169→
+   170→      if (result.passed) {
+   171→        setStep('location_passed');
+   172→      } else {
+   173→        setStep('location_failed');
+   174→      }
+   175→    } catch (err) {
+   176→      setError('Location check failed. ' + (err instanceof Error ? err.message : 'Unknown error'));
+   177→      setStep('location_failed');
+   178→    }
+   179→  }, [useDemoMode]);
+   180→
+   181→  // ── Step 2: Selfie Capture ─────────────────────────────────────────
+   182→  const startSelfieCapture = useCallback(async () => {
+   183→    setStep('selfie');
+   184→    setError('');
+   185→
+   186→    try {
+   187→      const stream = await navigator.mediaDevices.getUserMedia({
+   188→        video: { facingMode: 'user', width: 480, height: 640 },
+   189→        audio: false,
+   190→      });
+   191→      streamRef.current = stream;
+   192→
+   193→      if (videoRef.current) {
+   194→        videoRef.current.srcObject = stream;
+   195→        await videoRef.current.play();
+   196→      }
+   197→    } catch {
+   198→      // Camera not available — allow skip in demo
+   199→      if (useDemoMode) {
+   200→        setStep('otp_request');
+   201→      } else {
+   202→        setError('Camera access denied. Please allow camera access.');
+   203→      }
+   204→    }
+   205→  }, [useDemoMode]);
+   206→
+   207→  const captureSelfie = useCallback(() => {
+   208→    if (!videoRef.current || !canvasRef.current) return;
+   209→
+   210→    const video = videoRef.current;
+   211→    const canvas = canvasRef.current;
+   212→    canvas.width = video.videoWidth;
+   213→    canvas.height = video.videoHeight;
+   214→
+   215→    const ctx = canvas.getContext('2d');
+   216→    if (!ctx) return;
+   217→
+   218→    // Mirror the image (selfie style)
+   219→    ctx.translate(canvas.width, 0);
+   220→    ctx.scale(-1, 1);
+   221→    ctx.drawImage(video, 0, 0);
+   222→    ctx.setTransform(1, 0, 0, 1, 0, 0);
+   223→
+   224→    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+   225→    setSelfieDataUrl(dataUrl);
+   226→
+   227→    // Stop camera stream
+   228→    if (streamRef.current) {
+   229→      streamRef.current.getTracks().forEach((t) => t.stop());
+   230→      streamRef.current = null;
+   231→    }
+   232→
+   233→    setStep('selfie_processing');
+   234→    // Simulate liveness check processing
+   235→    setTimeout(() => {
+   236→      setStep('otp_request');
+   237→    }, 1500);
+   238→  }, []);
+   239→
+   240→  const skipSelfie = useCallback(() => {
+   241→    if (streamRef.current) {
+   242→      streamRef.current.getTracks().forEach((t) => t.stop());
+   243→      streamRef.current = null;
+   244→    }
+   245→    setStep('otp_request');
+   246→  }, []);
+   247→
+   248→  const retakeSelfie = useCallback(() => {
+   249→    setSelfieDataUrl(null);
+   250→    startSelfieCapture();
+   251→  }, [startSelfieCapture]);
+   252→
+   253→  // ── Step 3: OTP Verification ──────────────────────────────────────
+   254→  const handleRequestOTP = useCallback(() => {
+   255→    setResendTimer(RESEND_COOLDOWN);
+   256→    setStep('otp_enter');
+   257→  }, []);
+   258→
+   259→  const handleOtpChange = useCallback(
+   260→    (index: number, value: string) => {
+   261→      const digit = value.replace(/\D/g, '');
+   262→      if (digit.length > 1) {
+   263→        const digits = digit.slice(0, 4);
+   264→        const newOtp = [...otp];
+   265→        for (let i = 0; i < digits.length && index + i < 4; i++) {
+   266→          newOtp[index + i] = digits[i];
+   267→        }
+   268→        setOtp(newOtp);
+   269→        setError('');
+   270→        const nextEmpty = newOtp.findIndex((v, i) => i > index && v === '');
+   271→        inputRefs.current[nextEmpty !== -1 ? nextEmpty : 3]?.focus();
+   272→        return;
+   273→      }
+   274→      const newOtp = [...otp];
+   275→      newOtp[index] = digit;
+   276→      setOtp(newOtp);
+   277→      setError('');
+   278→      if (digit && index < 3) inputRefs.current[index + 1]?.focus();
+   279→    },
+   280→    [otp],
+   281→  );
+   282→
+   283→  const handleKeyDown = useCallback(
+   284→    (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+   285→      if (e.key === 'Backspace') {
+   286→        if (!otp[index] && index > 0) {
+   287→          const newOtp = [...otp];
+   288→          newOtp[index - 1] = '';
+   289→          setOtp(newOtp);
+   290→          inputRefs.current[index - 1]?.focus();
+   291→        } else {
+   292→          const newOtp = [...otp];
+   293→          newOtp[index] = '';
+   294→          setOtp(newOtp);
+   295→        }
+   296→      }
+   297→    },
+   298→    [otp],
+   299→  );
+   300→
+   301→  const handlePaste = useCallback(
+   302→    (e: React.ClipboardEvent<HTMLInputElement>) => {
+   303→      e.preventDefault();
+   304→      const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+   305→      if (!pasted) return;
+   306→      const newOtp = [...otp];
+   307→      for (let i = 0; i < pasted.length && i < 4; i++) newOtp[i] = pasted[i];
+   308→      setOtp(newOtp);
+   309→      setError('');
+   310→      inputRefs.current[Math.min(pasted.length, 3)]?.focus();
+   311→    },
+   312→    [otp],
+   313→  );
+   314→
+   315→  const handleVerify = useCallback(() => {
+   316→    const enteredOtp = otp.join('');
+   317→    if (enteredOtp.length !== 4) {
+   318→      setError('Please enter all 4 digits');
+   319→      return;
+   320→    }
+   321→    setStep('otp_verifying');
+   322→    setError('');
+   323→    setTimeout(() => {
+   324→      if (enteredOtp === DEMO_OTP) {
+   325→        setStep('success');
+   326→        setTimeout(() => onStart(shift.id), 1500);
+   327→      } else {
+   328→        setError('Invalid OTP. Please try again.');
+   329→        setStep('otp_enter');
+   330→        setOtp(['', '', '', '']);
+   331→        inputRefs.current[0]?.focus();
+   332→      }
+   333→    }, 1800);
+   334→  }, [otp, shift.id, onStart]);
+   335→
+   336→  const handleResend = useCallback(() => {
+   337→    if (resendTimer > 0) return;
+   338→    setResendTimer(RESEND_COOLDOWN);
+   339→    setOtp(['', '', '', '']);
+   340→    setError('');
+   341→    inputRefs.current[0]?.focus();
+   342→  }, [resendTimer]);
+   343→
+   344→  const handleCopyOtp = useCallback(() => {
+   345→    navigator.clipboard.writeText(DEMO_OTP).then(() => {
+   346→      setCopiedOtp(true);
+   347→      setTimeout(() => setCopiedOtp(false), 2000);
+   348→    });
+   349→  }, []);
+   350→
+   351→  const handleDialogClose = useCallback(
+   352→    (open: boolean) => {
+   353→      if (!open) onCancel();
+   354→    },
+   355→    [onCancel],
+   356→  );
+   357→
+   358→  // ── Sub-renderers ──────────────────────────────────────────────────
+   359→
+   360→  // Shift summary card
+   361→  const renderShiftSummary = () => (
+   362→    <div className="rounded-lg border bg-muted/40 p-3 space-y-2 text-sm">
+   363→      <div className="flex items-center gap-2 text-muted-foreground">
+   364→        <Badge variant="outline" className="text-xs font-medium">
+   365→          {shift.serviceType}
+   366→        </Badge>
+   367→        <span className="font-medium text-foreground">{shift.bookingId}</span>
+   368→      </div>
+   369→      <div className="grid grid-cols-1 gap-1.5 mt-2">
+   370→        <div className="flex items-center gap-2">
+   371→          <Clock className="size-3.5 text-muted-foreground shrink-0" />
+   372→          <span>{formatTime(shift.startTime)} – {formatTime(shift.endTime)}</span>
+   373→        </div>
+   374→        {shift.address && (
+   375→          <div className="flex items-center gap-2">
+   376→            <MapPin className="size-3.5 text-muted-foreground shrink-0" />
+   377→            <span className="truncate">{shift.address}</span>
+   378→          </div>
+   379→        )}
+   380→        <div className="flex items-center gap-2">
+   381→          <IndianRupee className="size-3.5 text-muted-foreground shrink-0" />
+   382→          <span className="font-semibold text-emerald-600">₹{shift.earnings.toLocaleString('en-IN')}</span>
+   383→        </div>
+   384→      </div>
+   385→    </div>
+   386→  );
+   387→
+   388→  // Progress stepper
+   389→  const renderStepper = (currentStep: number) => (
+   390→    <div className="flex items-center justify-center gap-1 mb-2">
+   391→      {[
+   392→        { n: 1, label: 'Location' },
+   393→        { n: 2, label: 'Selfie' },
+   394→        { n: 3, label: 'OTP' },
+   395→      ].map((s, i) => (
+   396→        <div key={s.n} className="flex items-center gap-1">
+   397→          <div
+   398→            className={`flex items-center justify-center rounded-full size-7 text-xs font-bold ${
+   399→              currentStep >= s.n
+   400→                ? 'bg-blue-600 text-white'
+   401→                : 'bg-gray-100 text-gray-400'
+   402→            }`}
+   403→          >
+   404→            {currentStep > s.n ? <CheckCircle className="size-3.5" /> : s.n}
+   405→          </div>
+   406→          {i < 2 && (
+   407→            <div
+   408→              className={`w-8 h-0.5 ${
+   409→                currentStep > s.n ? 'bg-blue-600' : 'bg-gray-200'
+   410→              }`}
+   411→            />
+   412→          )}
+   413→        </div>
+   414→      ))}
+   415→    </div>
+   416→  );
+   417→
+   418→  // Anti-spoof results display
+   419→  const renderAntiSpoofResults = (result: AntiSpoofResult) => (
+   420→    <div className="space-y-2">
+   421→      {/* Overall score bar */}
+   422→      <div className="flex items-center justify-between">
+   423→        <span className="text-sm font-medium">Verification Score</span>
+   424→        <div className="flex items-center gap-2">
+   425→          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+   426→            <div
+   427→              className={`h-full rounded-full transition-all ${
+   428→                result.score >= 80 ? 'bg-emerald-500' :
+   429→                result.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
+   430→              }`}
+   431→              style={{ width: `${result.score}%` }}
+   432→            />
+   433→          </div>
+   434→          <span className={`text-sm font-bold ${
+   435→            result.score >= 80 ? 'text-emerald-600' :
+   436→            result.score >= 50 ? 'text-amber-600' : 'text-red-600'
+   437→          }`}>
+   438→            {result.score}/100
+   439→          </span>
+   440→        </div>
+   441→      </div>
+   442→
+   443→      {/* Layer results */}
+   444→      <div className="grid grid-cols-1 gap-1.5">
+   445→        {result.layerResults.map((layer) => (
+   446→          <div
+   447→            key={layer.layer}
+   448→            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
+   449→              layer.passed ? 'bg-emerald-50' : 'bg-red-50'
+   450→            }`}
+   451→          >
+   452→            {layer.passed ? (
+   453→              <CheckCircle className="size-3.5 text-emerald-600 shrink-0" />
+   454→            ) : (
+   455→              <XCircle className="size-3.5 text-red-500 shrink-0" />
+   456→            )}
+   457→            <div className="flex-1 min-w-0">
+   458→              <span className={`font-medium ${
+   459→                layer.passed ? 'text-emerald-700' : 'text-red-700'
+   460→              }`}>
+   461→                {layer.layer}
+   462→              </span>
+   463→              <span className="ml-1.5 text-muted-foreground">{layer.message}</span>
+   464→            </div>
+   465→          </div>
+   466→        ))}
+   467→      </div>
+   468→
+   469→      {/* Risk badge */}
+   470→      <div className="flex items-center justify-center">
+   471→        <Badge
+   472→          className={`text-xs ${
+   473→            result.riskLevel === 'low'
+   474→              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+   475→              : result.riskLevel === 'medium'
+   476→              ? 'bg-amber-100 text-amber-700 border-amber-200'
+   477→              : 'bg-red-100 text-red-700 border-red-200'
+   478→          }`}
+   479→        >
+   480→          <ShieldCheck className="size-3 mr-1" />
+   481→          Risk Level: {result.riskLevel.toUpperCase()}
+   482→        </Badge>
+   483→      </div>
+   484→    </div>
+   485→  );
+   486→
+   487→  // OTP input fields
+   488→  const renderOtpInputs = () => (
+   489→    <div className="flex justify-center gap-3">
+   490→      {otp.map((digit, i) => (
+   491→        <Input
+   492→          key={i}
+   493→          ref={(el) => { inputRefs.current[i] = el; }}
+   494→          type="text"
+   495→          inputMode="numeric"
+   496→          maxLength={4}
+   497→          value={digit}
+   498→          onChange={(e) => handleOtpChange(i, e.target.value)}
+   499→          onKeyDown={(e) => handleKeyDown(i, e)}
+   500→          onPaste={handlePaste}
+   501→          disabled={step === 'otp_verifying'}
+   502→          className={
+   503→            'h-14 w-14 text-center text-2xl font-bold tracking-widest tabular-nums focus-visible:ring-blue-500 ' +
+   504→            (error ? 'border-destructive focus-visible:ring-destructive' : '')
+   505→          }
+   506→          aria-label={`OTP digit ${i + 1}`}
+   507→        />
+   508→      ))}
+   509→    </div>
+   510→  );
+   511→
+   512→  // Hidden canvas for selfie capture
+   513→  const renderHiddenCanvas = () => (
+   514→    <canvas ref={canvasRef} className="hidden" />
+   515→  );
+   516→
+   517→  // ── RENDER: Location Check (Loading) ──────────────────────────────
+   518→  if (step === 'location_check') {
+   519→    return (
+   520→      <Dialog open onOpenChange={handleDialogClose}>
+   521→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   522→          <DialogHeader className="text-center sm:text-center">
+   523→            {renderStepper(1)}
+   524→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-blue-100">
+   525→              <MapPin className="size-7 text-blue-600" />
+   526→            </div>
+   527→            <DialogTitle className="text-xl">Verifying Your Location</DialogTitle>
+   528→            <DialogDescription>
+   529→              Running 8-layer anti-spoofing checks. Please stay at the care location.
+   530→            </DialogDescription>
+   531→          </DialogHeader>
+   532→
+   533→          <div className="flex flex-col items-center py-6 gap-4">
+   534→            <div className="relative">
+   535→              <div className="size-16 rounded-full border-4 border-blue-200" />
+   536→              <Loader2 className="absolute inset-0 size-16 animate-spin text-blue-600" />
+   537→            </div>
+   538→            <div className="text-center space-y-1">
+   539→              <p className="text-sm font-medium text-gray-900">Scanning Environment…</p>
+   540→              <div className="space-y-1 text-xs text-muted-foreground">
+   541→                <p>GPS High Accuracy</p>
+   542→                <p>Multi-Sample Consistency</p>
+   543→                <p>Speed Analysis</p>
+   544→                <p>Geofence Verification</p>
+   545→                <p>IP Cross-Check</p>
+   546→              </div>
+   547→            </div>
+   548→          </div>
+   549→
+   550→          <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
+   551→            <Fingerprint className="size-3.5" />
+   552→            <span>Device: {deviceId}</span>
+   553→          </div>
+   554→
+   555→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   556→            <Button variant="ghost" onClick={onCancel} className="w-full">
+   557→              Cancel
+   558→            </Button>
+   559→          </DialogFooter>
+   560→        </DialogContent>
+   561→      </Dialog>
+   562→    );
+   563→  }
+   564→
+   565→  // ── RENDER: Location Passed ────────────────────────────────────────
+   566→  if (step === 'location_passed' && antiSpoofResult) {
+   567→    return (
+   568→      <Dialog open onOpenChange={handleDialogClose}>
+   569→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   570→          <DialogHeader className="text-center sm:text-center">
+   571→            {renderStepper(1)}
+   572→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-emerald-100">
+   573→              <CheckCircle className="size-7 text-emerald-600" />
+   574→            </div>
+   575→            <DialogTitle className="text-xl">Location Verified</DialogTitle>
+   576→            <DialogDescription>
+   577→              All 8 anti-spoofing checks passed. Now please capture a selfie.
+   578→            </DialogDescription>
+   579→          </DialogHeader>
+   580→
+   581→          <div className="space-y-4">
+   582→            {renderAntiSpoofResults(antiSpoofResult)}
+   583→          </div>
+   584→
+   585→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   586→            <Button
+   587→              onClick={startSelfieCapture}
+   588→              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+   589→            >
+   590→              <Camera className="size-4 mr-2" />
+   591→              Continue to Selfie
+   592→            </Button>
+   593→          </DialogFooter>
+   594→        </DialogContent>
+   595→      </Dialog>
+   596→    );
+   597→  }
+   598→
+   599→  // ── RENDER: Location Failed ─────────────────────────────────────────
+   600→  if (step === 'location_failed') {
+   601→    return (
+   602→      <Dialog open onOpenChange={handleDialogClose}>
+   603→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   604→          <DialogHeader className="text-center sm:text-center">
+   605→            {renderStepper(1)}
+   606→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-red-100">
+   607→              <XCircle className="size-7 text-red-500" />
+   608→            </div>
+   609→            <DialogTitle className="text-xl">Location Verification Failed</DialogTitle>
+   610→            <DialogDescription>
+   611→              Anti-spoofing checks detected anomalies. Attendance cannot be marked.
+   612→            </DialogDescription>
+   613→          </DialogHeader>
+   614→
+   615→          <div className="space-y-4">
+   616→            {error && (
+   617→              <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+   618→                <AlertCircle className="size-4 shrink-0" />
+   619→                {error}
+   620→              </div>
+   621→            )}
+   622→
+   623→            {antiSpoofResult && renderAntiSpoofResults(antiSpoofResult)}
+   624→
+   625→            {antiSpoofResult && antiSpoofResult.recommendations.length > 0 && (
+   626→              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1.5">
+   627→                <p className="text-xs font-semibold text-amber-700">Recommendations:</p>
+   628→                {antiSpoofResult.recommendations.map((rec, i) => (
+   629→                  <p key={i} className="text-xs text-amber-600">• {rec}</p>
+   630→                ))}
+   631→              </div>
+   632→            )}
+   633→          </div>
+   634→
+   635→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   636→            <Button
+   637→              onClick={startLocationCheck}
+   638→              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+   639→            >
+   640→              <RotateCcw className="size-4 mr-2" />
+   641→              Retry Location Check
+   642→            </Button>
+   643→            <Button variant="ghost" onClick={onCancel} className="w-full">
+   644→              Cancel
+   645→            </Button>
+   646→          </DialogFooter>
+   647→        </DialogContent>
+   648→      </Dialog>
+   649→    );
+   650→  }
+   651→
+   652→  // ── RENDER: Selfie Capture ────────────────────────────────────────
+   653→  if (step === 'selfie') {
+   654→    return (
+   655→      <Dialog open onOpenChange={handleDialogClose}>
+   656→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   657→          <DialogHeader className="text-center sm:text-center">
+   658→            {renderStepper(2)}
+   659→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-blue-100">
+   660→              <Camera className="size-7 text-blue-600" />
+   661→            </div>
+   662→            <DialogTitle className="text-xl">Capture Selfie</DialogTitle>
+   663→            <DialogDescription>
+   664→              Take a live selfie for identity verification. This photo is encrypted and stored securely.
+   665→            </DialogDescription>
+   666→          </DialogHeader>
+   667→
+   668→          <div className="space-y-4">
+   669→            {/* Camera preview */}
+   670→            <div className="relative flex justify-center">
+   671→              <div className="relative w-64 h-80 rounded-2xl overflow-hidden bg-black shadow-lg">
+   672→                <video
+   673→                  ref={videoRef}
+   674→                  className="w-full h-full object-cover"
+   675→                  style={{ transform: 'scaleX(-1)' }}
+   676→                  autoPlay
+   677→                  playsInline
+   678→                  muted
+   679→                />
+   680→                {/* Face overlay guide */}
+   681→                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+   682→                  <div className="w-36 h-48 rounded-full border-2 border-white/50" />
+   683→                </div>
+   684→              </div>
+   685→            </div>
+   686→
+   687→            <p className="text-center text-xs text-muted-foreground">
+   688→              Position your face within the oval guide
+   689→            </p>
+   690→          </div>
+   691→
+   692→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   693→            <Button
+   694→              onClick={captureSelfie}
+   695→              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+   696→            >
+   697→              <Camera className="size-4 mr-2" />
+   698→              Capture Selfie
+   699→            </Button>
+   700→            {useDemoMode && (
+   701→              <Button
+   702→                variant="ghost"
+   703→                onClick={skipSelfie}
+   704→                className="w-full text-muted-foreground"
+   705→              >
+   706→                Skip (Demo Mode)
+   707→              </Button>
+   708→            )}
+   709→          </DialogFooter>
+   710→          {renderHiddenCanvas()}
+   711→        </DialogContent>
+   712→      </Dialog>
+   713→    );
+   714→  }
+   715→
+   716→  // ── RENDER: Selfie Processing ──────────────────────────────────────
+   717→  if (step === 'selfie_processing') {
+   718→    return (
+   719→      <Dialog open onOpenChange={() => {}}>
+   720→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   721→          <DialogHeader className="text-center sm:text-center">
+   722→            {renderStepper(2)}
+   723→          </DialogHeader>
+   724→          <div className="flex flex-col items-center py-6 gap-4">
+   725→            <div className="relative">
+   726→              <div className="size-16 rounded-full border-4 border-blue-200" />
+   727→              <Loader2 className="absolute inset-0 size-16 animate-spin text-blue-600" />
+   728→            </div>
+   729→            <div className="text-center space-y-1">
+   730→              <h3 className="text-lg font-semibold">Verifying Selfie…</h3>
+   731→              <p className="text-sm text-muted-foreground">
+   732→                Running liveness detection. Please wait.
+   733→              </p>
+   734→            </div>
+   735→            {/* Show captured selfie */}
+   736→            {selfieDataUrl && (
+   737→              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-blue-200">
+   738→                {/* eslint-disable-next-line @next/next/no-img-element */}
+   739→                <img src={selfieDataUrl} alt="Selfie preview" className="w-full h-full object-cover" />
+   740→              </div>
+   741→            )}
+   742→          </div>
+   743→        </DialogContent>
+   744→      </Dialog>
+   745→    );
+   746→  }
+   747→
+   748→  // ── RENDER: OTP Request ───────────────────────────────────────────
+   749→  if (step === 'otp_request') {
+   750→    return (
+   751→      <Dialog open onOpenChange={handleDialogClose}>
+   752→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   753→          <DialogHeader className="text-center sm:text-center">
+   754→            {renderStepper(3)}
+   755→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-blue-100">
+   756→              <ShieldCheck className="size-7 text-blue-600" />
+   757→            </div>
+   758→            <DialogTitle className="text-xl">Final Verification</DialogTitle>
+   759→            <DialogDescription>
+   760→              An OTP will be sent to the {familyLabel.toLowerCase()} to confirm shift start.
+   761→            </DialogDescription>
+   762→          </DialogHeader>
+   763→
+   764→          <div className="space-y-4">
+   765→            {renderShiftSummary()}
+   766→
+   767→            <div className="rounded-lg border bg-blue-50 p-3 space-y-1.5">
+   768→              <p className="text-xs font-medium text-blue-700">
+   769→                OTP will be sent to:
+   770→              </p>
+   771→              <div className="flex items-center gap-2">
+   772→                <Phone className="size-4 text-blue-600" />
+   773→                <span className="text-sm font-medium">{shift.patientName}</span>
+   774→                <span className="text-sm text-muted-foreground">
+   775→                  ({maskPhone(shift.patientPhone)})
+   776→                </span>
+   777→              </div>
+   778→            </div>
+   779→
+   780→            {/* Show checkmark for completed steps */}
+   781→            <div className="flex items-center justify-center gap-4 text-xs text-emerald-600">
+   782→              <div className="flex items-center gap-1">
+   783→                <CheckCircle className="size-3.5" />
+   784→                <span>Location verified</span>
+   785→              </div>
+   786→              {selfieDataUrl && (
+   787→                <div className="flex items-center gap-1">
+   788→                  <CheckCircle className="size-3.5" />
+   789→                  <span>Selfie captured</span>
+   790→                </div>
+   791→              )}
+   792→            </div>
+   793→          </div>
+   794→
+   795→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   796→            <Button
+   797→              onClick={handleRequestOTP}
+   798→              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+   799→            >
+   800→              <Send className="size-4 mr-2" />
+   801→              Send OTP to {familyLabel}
+   802→            </Button>
+   803→            <Button variant="ghost" onClick={onCancel} className="w-full">
+   804→              Cancel
+   805→            </Button>
+   806→          </DialogFooter>
+   807→        </DialogContent>
+   808→      </Dialog>
+   809→    );
+   810→  }
+   811→
+   812→  // ── RENDER: OTP Enter ──────────────────────────────────────────────
+   813→  if (step === 'otp_enter') {
+   814→    return (
+   815→      <Dialog open onOpenChange={handleDialogClose}>
+   816→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   817→          <DialogHeader className="text-center sm:text-center">
+   818→            <Button
+   819→              variant="ghost"
+   820→              size="icon"
+   821→              className="absolute top-4 left-4 -mt-2 size-8"
+   822→              onClick={() => setStep('otp_request')}
+   823→            >
+   824→              <ArrowLeft className="size-4" />
+   825→            </Button>
+   826→            {renderStepper(3)}
+   827→            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-blue-100">
+   828→              <ShieldCheck className="size-7 text-blue-600" />
+   829→            </div>
+   830→            <DialogTitle className="text-xl">Enter OTP</DialogTitle>
+   831→            <DialogDescription>
+   832→              Enter the 4-digit code sent to {familyLabel.toLowerCase()}{' '}
+   833→              <span className="font-medium text-foreground">
+   834→                ({maskPhone(shift.patientPhone)})
+   835→              </span>
+   836→            </DialogDescription>
+   837→          </DialogHeader>
+   838→
+   839→          <div className="space-y-4">
+   840→            {renderOtpInputs()}
+   841→
+   842→            {error && (
+   843→              <div className="flex items-center justify-center gap-2 text-sm text-destructive">
+   844→                <AlertCircle className="size-4" />
+   845→                {error}
+   846→              </div>
+   847→            )}
+   848→
+   849→            {/* Demo helper */}
+   850→            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+   851→              <span>Demo OTP:</span>
+   852→              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm font-semibold text-foreground">
+   853→                {DEMO_OTP}
+   854→              </code>
+   855→              <button
+   856→                onClick={handleCopyOtp}
+   857→                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+   858→              >
+   859→                <Copy className="size-3" />
+   860→                {copiedOtp ? 'Copied!' : 'Copy'}
+   861→              </button>
+   862→            </div>
+   863→
+   864→            {/* Resend */}
+   865→            <div className="text-center text-sm">
+   866→              {resendTimer > 0 ? (
+   867→                <span className="text-muted-foreground">
+   868→                  Resend OTP in{' '}
+   869→                  <span className="font-semibold text-foreground">{resendTimer}s</span>
+   870→                </span>
+   871→              ) : (
+   872→                <button
+   873→                  onClick={handleResend}
+   874→                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors"
+   875→                >
+   876→                  Resend OTP
+   877→                </button>
+   878→              )}
+   879→            </div>
+   880→          </div>
+   881→
+   882→          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+   883→            <Button
+   884→              onClick={handleVerify}
+   885→              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+   886→              disabled={otp.join('').length < 4}
+   887→            >
+   888→              <ShieldCheck className="size-4 mr-2" />
+   889→              Verify & Start Shift
+   890→            </Button>
+   891→          </DialogFooter>
+   892→        </DialogContent>
+   893→      </Dialog>
+   894→    );
+   895→  }
+   896→
+   897→  // ── RENDER: OTP Verifying ──────────────────────────────────────────
+   898→  if (step === 'otp_verifying') {
+   899→    return (
+   900→      <Dialog open onOpenChange={() => {}}>
+   901→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   902→          <div className="flex flex-col items-center justify-center py-8 gap-4">
+   903→            <div className="relative">
+   904→              <div className="size-16 rounded-full border-4 border-blue-200" />
+   905→              <Loader2 className="absolute inset-0 size-16 animate-spin text-blue-600" />
+   906→            </div>
+   907→            <div className="text-center space-y-1">
+   908→              <h3 className="text-lg font-semibold">Verifying OTP…</h3>
+   909→              <p className="text-sm text-muted-foreground">
+   910→                Confirming with {familyLabel.toLowerCase()}.
+   911→              </p>
+   912→            </div>
+   913→          </div>
+   914→        </DialogContent>
+   915→      </Dialog>
+   916→    );
+   917→  }
+   918→
+   919→  // ── RENDER: Success ───────────────────────────────────────────────
+   920→  if (step === 'success') {
+   921→    return (
+   922→      <Dialog open onOpenChange={() => {}}>
+   923→        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   924→          <div className="flex flex-col items-center justify-center py-6 gap-4">
+   925→            <div className="relative">
+   926→              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/20" />
+   927→              <div className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/30">
+   928→                <CheckCircle className="size-10 text-white" strokeWidth={2.5} />
+   929→              </div>
+   930→            </div>
+   931→            <div className="text-center space-y-2">
+   932→              <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-400 bg-clip-text text-transparent">
+   933→                Shift Started!
+   934→              </h3>
+   935→              <p className="text-sm text-muted-foreground max-w-xs">
+   936→                Attendance marked successfully. All 3 verification steps completed.
+   937→              </p>
+   938→            </div>
+   939→
+   940→            {/* Show completed checks */}
+   941→            <div className="w-full space-y-2 px-4">
+   942→              <div className="flex items-center gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+   943→                <CheckCircle className="size-4 text-emerald-600 shrink-0" />
+   944→                <div className="text-xs">
+   945→                  <span className="font-medium text-emerald-700">Location Verified</span>
+   946→                  <span className="text-emerald-600 ml-1">— 8 anti-spoof checks passed</span>
+   947→                </div>
+   948→              </div>
+   949→              <div className="flex items-center gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+   950→                <CheckCircle className="size-4 text-emerald-600 shrink-0" />
+   951→                <div className="text-xs">
+   952→                  <span className="font-medium text-emerald-700">Selfie Captured</span>
+   953→                  <span className="text-emerald-600 ml-1">— Liveness verified</span>
+   954→                </div>
+   955→              </div>
+   956→              <div className="flex items-center gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+   957→                <CheckCircle className="size-4 text-emerald-600 shrink-0" />
+   958→                <div className="text-xs">
+   959→                  <span className="font-medium text-emerald-700">OTP Confirmed</span>
+   960→                  <span className="text-emerald-600 ml-1">— Verified by {familyLabel.toLowerCase()}</span>
+   961→                </div>
+   962→              </div>
+   963→            </div>
+   964→
+   965→            {renderShiftSummary()}
+   966→
+   967→            <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm w-full">
+   968→              <Clock className="size-4 text-blue-600" />
+   969→              <span className="font-semibold text-blue-700">
+   970→                {formatTime(shift.startTime)} – {formatTime(shift.endTime)}
+   971→              </span>
+   972→              <span className="text-muted-foreground">shift active</span>
+   973→            </div>
+   974→          </div>
+   975→        </DialogContent>
+   976→      </Dialog>
+   977→    );
+   978→  }
+   979→
+   980→  // ── Initial render (auto-start location check) ────────────────────
+   981→  return (
+   982→    <Dialog open onOpenChange={handleDialogClose}>
+   983→      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+   984→        <DialogHeader className="text-center sm:text-center">
+   985→          <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-blue-100">
+   986→            <ShieldCheck className="size-7 text-blue-600" />
+   987→          </div>
+   988→          <DialogTitle className="text-xl">Shift Check-In</DialogTitle>
+   989→          <DialogDescription>
+   990→            Daily attendance is mandatory before starting any shift. This involves:
+   991→          </DialogDescription>
+   992→        </DialogHeader>
+   993→
+   994→        <div className="space-y-4">
+   995→          {renderStepper(0)}
+   996→
+   997→          {/* 3-step overview */}
+   998→          <div className="space-y-3">
+   999→            <div className="flex items-start gap-3 p-3 rounded-lg border bg-blue-50">
+  1000→              <div className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold shrink-0 mt-0.5">1</div>
+  1001→              <div>
+  1002→                <p className="text-sm font-medium text-blue-700">Location Verification</p>
+  1003→                <p className="text-xs text-blue-600">8-layer anti-spoofing check — must be at care location</p>
+  1004→              </div>
+  1005→            </div>
+  1006→            <div className="flex items-start gap-3 p-3 rounded-lg border bg-blue-50">
+  1007→              <div className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold shrink-0 mt-0.5">2</div>
+  1008→              <div>
+  1009→                <p className="text-sm font-medium text-blue-700">Live Selfie</p>
+  1010→                <p className="text-xs text-blue-600">Liveness detection ensures real person present</p>
+  1011→              </div>
+  1012→            </div>
+  1013→            <div className="flex items-start gap-3 p-3 rounded-lg border bg-blue-50">
+  1014→              <div className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold shrink-0 mt-0.5">3</div>
+  1015→              <div>
+  1016→                <p className="text-sm font-medium text-blue-700">OTP Confirmation</p>
+  1017→                <p className="text-xs text-blue-600">4-digit OTP verified by {familyLabel.toLowerCase()}</p>
+  1018→              </div>
+  1019→            </div>
+  1020→          </div>
+  1021→
+  1022→          {renderShiftSummary()}
+  1023→
+  1024→          {/* Demo mode toggle */}
+  1025→          <div className="flex items-center gap-2 justify-center">
+  1026→            <button
+  1027→              onClick={() => setUseDemoMode(!useDemoMode)}
+  1028→              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-blue-600 transition-colors"
+  1029→            >
+  1030→              <Eye className="size-3.5" />
+  1031→              {useDemoMode ? 'Demo Mode ON' : 'Enable Demo Mode'}
+  1032→            </button>
+  1033→            {useDemoMode && (
+  1034→              <Badge variant="outline" className="text-[10px] bg-amber-50 border-amber-200 text-amber-700">
+  1035→                DEMO
+  1036→              </Badge>
+  1037→            )}
+  1038→          </div>
+  1039→        </div>
+  1040→
+  1041→        <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+  1042→          <Button
+  1043→            onClick={startLocationCheck}
+  1044→            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+  1045→          >
+  1046→            <MapPin className="size-4 mr-2" />
+  1047→            Start Check-In
+  1048→          </Button>
+  1049→          <Button variant="ghost" onClick={onCancel} className="w-full">
+  1050→            Cancel
+  1051→          </Button>
+  1052→        </DialogFooter>
+  1053→      </DialogContent>
+  1054→    </Dialog>
+  1055→  );
+  1056→}
+  1057→

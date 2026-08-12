@@ -1,0 +1,645 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useMemo } from 'react';
+     4→import {
+     5→  AreaChart,
+     6→  Area,
+     7→  XAxis,
+     8→  YAxis,
+     9→  CartesianGrid,
+    10→  Tooltip,
+    11→  ResponsiveContainer,
+    12→} from 'recharts';
+    13→import {
+    14→  Calendar,
+    15→  Wallet,
+    16→  Users,
+    17→  ClipboardList,
+    18→  Clock,
+    19→  MapPin,
+    20→  ChevronRight,
+    21→  Activity,
+    22→  TrendingUp,
+    23→  CheckCircle,
+    24→  AlertCircle,
+    25→  XCircle,
+    26→  Briefcase,
+    27→  CalendarDays,
+    28→  CheckCircle2,
+    29→  Shield,
+    30→  ArrowRight,
+    31→  X,
+    32→} from 'lucide-react';
+    33→import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+    34→import { Skeleton } from '@/components/ui/skeleton';
+    35→import { Button } from '@/components/ui/button';
+    36→import {
+    37→  mockCaregiver,
+    38→  mockShifts,
+    39→  mockMonthlyEarnings,
+    40→  mockNotifications,
+    41→  mockCareTasks,
+    42→} from '@/lib/caregiver-data';
+    43→import ShiftCompleteOTP from './ShiftCompleteOTP';
+    44→
+    45→interface DashboardViewProps {
+    46→  caregiverName: string;
+    47→  specialty: string;
+    48→  onNavigate: (view: string, patientId?: string) => void;
+    49→}
+    50→
+    51→function formatCurrency(amount: number): string {
+    52→  return '₹' + amount.toLocaleString('en-IN');
+    53→}
+    54→
+    55→function getGreeting(): string {
+    56→  const hour = new Date().getHours();
+    57→  if (hour < 12) return 'Good Morning';
+    58→  if (hour < 17) return 'Good Afternoon';
+    59→  return 'Good Evening';
+    60→}
+    61→
+    62→function formatDate(): string {
+    63→  const now = new Date();
+    64→  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    65→  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    66→  return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+    67→}
+    68→
+    69→function getStatusBadge(status: string) {
+    70→  switch (status) {
+    71→    case 'confirmed':
+    72→      return (
+    73→        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+    74→          <Clock className="size-3" />
+    75→          Confirmed
+    76→        </span>
+    77→      );
+    78→    case 'in_progress':
+    79→      return (
+    80→        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-blue-200/50">
+    81→          <Activity className="size-3" />
+    82→          In Progress
+    83→        </span>
+    84→      );
+    85→    case 'completed':
+    86→      return (
+    87→        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+    88→          <CheckCircle className="size-3" />
+    89→          Completed
+    90→        </span>
+    91→      );
+    92→    case 'cancelled':
+    93→      return (
+    94→        <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+    95→          <XCircle className="size-3" />
+    96→          Cancelled
+    97→        </span>
+    98→      );
+    99→    default:
+   100→      return null;
+   101→  }
+   102→}
+   103→
+   104→function getModeBadge(mode: string) {
+   105→  if (mode === 'online') {
+   106→    return (
+   107→      <span className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+   108→        Online
+   109→      </span>
+   110→    );
+   111→  }
+   112→  return (
+   113→    <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+   114→      In-Home
+   115→    </span>
+   116→  );
+   117→}
+   118→
+   119→export default function DashboardView({ caregiverName, specialty, onNavigate }: DashboardViewProps) {
+   120→  const [isLoading, setIsLoading] = useState(true);
+   121→  const [completeShift, setCompleteShift] = useState<typeof mockShifts[number] | null>(null);
+   122→  const [shiftCompleted, setShiftCompleted] = useState(false);
+   123→  const [dismissVerificationBanner, setDismissVerificationBanner] = useState(false);
+   124→
+   125→  // Check optional verification status
+   126→  const getOptionalPendingCount = (): number => {
+   127→    try {
+   128→      const stored = localStorage.getItem('nurturee_caregiver_verification');
+   129→      if (!stored) return 3; // nothing submitted = all pending
+   130→      const docs = JSON.parse(stored);
+   131→      const optional = docs.filter((d: { type: string; status: string }) =>
+   132→        d.type !== 'aadhaar' && d.status !== 'approved' && d.status !== 'max_attempts_reached'
+   133→      );
+   134→      return optional.length;
+   135→    } catch { return 0; }
+   136→  };
+   137→
+   138→  const optionalPendingCount = !dismissVerificationBanner ? getOptionalPendingCount() : 0;
+   139→
+   140→  useEffect(() => {
+   141→    const timer = setTimeout(() => setIsLoading(false), 800);
+   142→    return () => clearTimeout(timer);
+   143→  }, []);
+   144→
+   145→  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+   146→
+   147→  const todayShifts = useMemo(
+   148→    () =>
+   149→      mockShifts
+   150→        .filter((s) => s.date === todayStr)
+   151→        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+   152→    [todayStr]
+   153→  );
+   154→
+   155→  const upcomingShifts = useMemo(
+   156→    () =>
+   157→      mockShifts
+   158→        .filter((s) => s.status === 'confirmed' || s.status === 'in_progress')
+   159→        .sort((a, b) => {
+   160→          const dateComp = a.date.localeCompare(b.date);
+   161→          return dateComp !== 0 ? dateComp : a.startTime.localeCompare(b.startTime);
+   162→        }),
+   163→    []
+   164→  );
+   165→
+   166→  const uniquePatientCount = useMemo(
+   167→    () => new Set(todayShifts.map((s) => s.patientId)).size,
+   168→    [todayShifts]
+   169→  );
+   170→
+   171→  const incompleteTaskCount = useMemo(
+   172→    () =>
+   173→      mockCareTasks.reduce((acc, ct) => {
+   174→        return acc + ct.tasks.filter((t) => !t.isCompleted).length;
+   175→      }, 0),
+   176→    []
+   177→  );
+   178→
+   179→  const chartData = useMemo(() => mockMonthlyEarnings.slice(-6), []);
+   180→
+   181→  if (isLoading) {
+   182→    return (
+   183→      <div className="space-y-6">
+   184→        {/* Welcome Skeleton */}
+   185→        <div className="rounded-2xl border border-gray-100 bg-card shadow-sm overflow-hidden">
+   186→          <div className="h-1.5 bg-gray-100 animate-pulse" />
+   187→          <div className="p-5 md:p-6 space-y-3">
+   188→            <Skeleton className="h-7 w-64 rounded-lg bg-gray-100" />
+   189→            <Skeleton className="h-4 w-44 rounded-lg bg-gray-100" />
+   190→          </div>
+   191→        </div>
+   192→
+   193→        {/* Stats Skeleton */}
+   194→        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+   195→          {Array.from({ length: 4 }).map((_, i) => (
+   196→            <div key={i} className="rounded-xl border border-gray-100 bg-card shadow-sm py-5 px-4 space-y-3">
+   197→              <div className="flex items-center justify-between">
+   198→                <Skeleton className="h-3 w-20 rounded bg-gray-100" />
+   199→                <Skeleton className="size-10 rounded-xl bg-gray-100" />
+   200→              </div>
+   201→              <Skeleton className="h-7 w-16 rounded bg-gray-100" />
+   202→              <Skeleton className="h-3 w-28 rounded bg-gray-100" />
+   203→            </div>
+   204→          ))}
+   205→        </div>
+   206→
+   207→        {/* Two Column Skeleton */}
+   208→        <div className="grid lg:grid-cols-3 gap-4">
+   209→          <div className="lg:col-span-2 rounded-xl border border-gray-100 bg-card shadow-sm p-5 space-y-4">
+   210→            <Skeleton className="h-5 w-36 rounded bg-gray-100" />
+   211→            <div className="space-y-3">
+   212→              {Array.from({ length: 3 }).map((_, i) => (
+   213→                <Skeleton key={i} className="h-20 w-full rounded-xl bg-gray-100" />
+   214→              ))}
+   215→            </div>
+   216→          </div>
+   217→          <div className="lg:col-span-1 rounded-xl border border-gray-100 bg-card shadow-sm p-5 space-y-4">
+   218→            <Skeleton className="h-5 w-28 rounded bg-gray-100" />
+   219→            <div className="space-y-3">
+   220→              {Array.from({ length: 3 }).map((_, i) => (
+   221→                <Skeleton key={i} className="h-14 w-full rounded-xl bg-gray-100" />
+   222→              ))}
+   223→            </div>
+   224→          </div>
+   225→        </div>
+   226→
+   227→        {/* Timeline Skeleton */}
+   228→        <div className="rounded-xl border border-gray-100 bg-card shadow-sm p-5 space-y-4">
+   229→          <Skeleton className="h-5 w-36 rounded bg-gray-100" />
+   230→          <div className="space-y-3 ml-10">
+   231→            {Array.from({ length: 3 }).map((_, i) => (
+   232→              <Skeleton key={i} className="h-16 w-full rounded-xl bg-gray-100" />
+   233→            ))}
+   234→          </div>
+   235→        </div>
+   236→
+   237→        {/* Chart Skeleton */}
+   238→        <div className="rounded-xl border border-gray-100 bg-card shadow-sm p-5 space-y-4">
+   239→          <Skeleton className="h-5 w-36 rounded bg-gray-100" />
+   240→          <Skeleton className="h-[200px] w-full rounded-xl bg-gray-100" />
+   241→        </div>
+   242→      </div>
+   243→    );
+   244→  }
+   245→
+   246→  return (
+   247→    <div className="space-y-6">
+   248→      {/* ========== Section 1: Welcome Header ========== */}
+   249→      <div className="bg-card rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+   250→        <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
+   251→        <div className="p-5 md:p-6">
+   252→          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   253→            <div>
+   254→              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
+   255→                {getGreeting()}, {caregiverName}
+   256→              </h1>
+   257→              <p className="text-sm text-gray-500 mt-1">{formatDate()}</p>
+   258→              <span className="inline-block mt-2 text-xs font-medium text-blue-600">
+   259→                {specialty === 'elder_care' ? 'Elder Care Specialist' : 'Child Care Specialist'}
+   260→              </span>
+   261→            </div>
+   262→            <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 inline-flex items-center gap-1.5 self-start">
+   263→              <Activity className="size-3.5" />
+   264→              {todayShifts.length} shift{todayShifts.length !== 1 ? 's' : ''} today
+   265→            </div>
+   266→          </div>
+   267→        </div>
+   268→      </div>
+   269→
+   270→      {/* ========== Verification Pending Banner ========== */}
+   271→      {optionalPendingCount > 0 && (
+   272→        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-center gap-3">
+   273→          <div className="size-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+   274→            <Shield className="size-4.5 text-amber-600" />
+   275→          </div>
+   276→          <div className="flex-1 min-w-0">
+   277→            <p className="text-sm font-medium text-amber-800">Complete Your Verification</p>
+   278→            <p className="text-xs text-amber-600">{optionalPendingCount} optional verification{optionalPendingCount > 1 ? 's' : ''} pending</p>
+   279→          </div>
+   280→          <button
+   281→            onClick={() => onNavigate('verification')}
+   282→            className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors"
+   283→          >
+   284→            Complete Now
+   285→            <ArrowRight className="size-3" />
+   286→          </button>
+   287→          <button
+   288→            onClick={() => setDismissVerificationBanner(true)}
+   289→            className="text-amber-400 hover:text-amber-600 transition-colors"
+   290→          >
+   291→            <X className="size-3.5" />
+   292→          </button>
+   293→        </div>
+   294→      )}
+   295→
+   296→      {/* ========== Section 2: Stats Cards ========== */}
+   297→      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+   298→        {/* Today's Shifts */}
+   299→        <button
+   300→          type="button"
+   301→          onClick={() => onNavigate('schedule')}
+   302→          className="bg-card rounded-xl border border-gray-100 shadow-sm py-5 px-4 text-left hover:border-blue-200 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+   303→        >
+   304→          <div className="flex items-center justify-between">
+   305→            <span className="text-xs font-medium text-gray-500">Today's Shifts</span>
+   306→            <div className="size-10 rounded-xl shadow-sm bg-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+   307→              <Calendar className="size-5 text-white" />
+   308→            </div>
+   309→          </div>
+   310→          <p className="text-xl font-bold text-gray-900 sm:text-2xl mt-2">{todayShifts.length}</p>
+   311→          <p className="text-[11px] text-gray-400 mt-0.5">Scheduled for today</p>
+   312→        </button>
+   313→
+   314→        {/* This Week Earnings */}
+   315→        <button
+   316→          type="button"
+   317→          onClick={() => onNavigate('earnings')}
+   318→          className="bg-card rounded-xl border border-gray-100 shadow-sm py-5 px-4 text-left hover:border-emerald-200 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+   319→        >
+   320→          <div className="flex items-center justify-between">
+   321→            <span className="text-xs font-medium text-gray-500">This Week</span>
+   322→            <div className="size-10 rounded-xl shadow-sm bg-emerald-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+   323→              <Wallet className="size-5 text-white" />
+   324→            </div>
+   325→          </div>
+   326→          <p className="text-xl font-bold text-gray-900 sm:text-2xl mt-2">
+   327→            {formatCurrency(mockCaregiver.earnings.thisWeek)}
+   328→          </p>
+   329→          <p className="text-[11px] text-gray-400 mt-0.5">
+   330→            <span className="inline-flex items-center gap-0.5 text-emerald-600">
+   331→              <TrendingUp className="size-3" />
+   332→              +12%
+   333→            </span>{' '}
+   334→            vs last week
+   335→          </p>
+   336→        </button>
+   337→
+   338→        {/* Active Care Members */}
+   339→        <button
+   340→          type="button"
+   341→          onClick={() => onNavigate('patients')}
+   342→          className="bg-card rounded-xl border border-gray-100 shadow-sm py-5 px-4 text-left hover:border-violet-200 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+   343→        >
+   344→          <div className="flex items-center justify-between">
+   345→            <span className="text-xs font-medium text-gray-500">Active Care Members</span>
+   346→            <div className="size-10 rounded-xl shadow-sm bg-violet-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+   347→              <Users className="size-5 text-white" />
+   348→            </div>
+   349→          </div>
+   350→          <p className="text-xl font-bold text-gray-900 sm:text-2xl mt-2">{uniquePatientCount}</p>
+   351→          <p className="text-[11px] text-gray-400 mt-0.5">Assigned today</p>
+   352→        </button>
+   353→
+   354→        {/* Pending Tasks */}
+   355→        <button
+   356→          type="button"
+   357→          onClick={() => onNavigate('care-tasks')}
+   358→          className="bg-card rounded-xl border border-gray-100 shadow-sm py-5 px-4 text-left hover:border-amber-200 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+   359→        >
+   360→          <div className="flex items-center justify-between">
+   361→            <span className="text-xs font-medium text-gray-500">Pending Tasks</span>
+   362→            <div className="size-10 rounded-xl shadow-sm bg-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+   363→              <ClipboardList className="size-5 text-white" />
+   364→            </div>
+   365→          </div>
+   366→          <p className="text-xl font-bold text-gray-900 sm:text-2xl mt-2">{incompleteTaskCount}</p>
+   367→          <p className="text-[11px] text-gray-400 mt-0.5">Remaining today</p>
+   368→        </button>
+   369→      </div>
+   370→
+   371→      {/* ========== Section 3: Upcoming Shifts + Quick Actions ========== */}
+   372→      <div className="grid lg:grid-cols-3 gap-4">
+   373→        {/* Upcoming Shifts */}
+   374→        <Card className="lg:col-span-2 border-gray-100 shadow-sm">
+   375→          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   376→            <CardTitle className="text-base font-semibold text-gray-900">Upcoming Shifts</CardTitle>
+   377→            <button
+   378→              onClick={() => onNavigate('schedule')}
+   379→              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+   380→            >
+   381→              View All
+   382→              <ChevronRight className="size-4" />
+   383→            </button>
+   384→          </CardHeader>
+   385→          <CardContent className="space-y-3">
+   386→            {upcomingShifts.length === 0 ? (
+   387→              <div className="text-center py-8">
+   388→                <Calendar className="size-10 text-gray-300 mx-auto mb-2" />
+   389→                <p className="text-sm text-gray-400">No upcoming shifts</p>
+   390→              </div>
+   391→            ) : (
+   392→              upcomingShifts.map((shift) => (
+   393→                <div
+   394→                  key={shift.id}
+   395→                  onClick={() => onNavigate('patients', shift.patientId)}
+   396→                  className="rounded-xl border border-gray-100 bg-white p-3 sm:p-4 hover:border-blue-200 hover:bg-blue-50/30 transition-colors cursor-pointer active:scale-[0.99]"
+   397→                >
+   398→                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+   399→                    <div className="flex items-center gap-3 flex-1 min-w-0">
+   400→                      <div className="rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-700 shrink-0">
+   401→                        {shift.startTime} – {shift.endTime}
+   402→                      </div>
+   403→                      <div className="min-w-0">
+   404→                        <p className="text-sm font-semibold text-gray-900 truncate">{shift.patientName}</p>
+   405→                        <p className="text-xs text-gray-500 truncate">{shift.serviceType}</p>
+   406→                      </div>
+   407→                    </div>
+   408→                    <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+   409→                      {getModeBadge(shift.consultationMode)}
+   410→                      {getStatusBadge(shift.status)}
+   411→                    </div>
+   412→                  </div>
+   413→                  {shift.consultationMode === 'in_home' && shift.address && (
+   414→                    <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+   415→                      <MapPin className="size-3 shrink-0" />
+   416→                      <span className="truncate">{shift.address}</span>
+   417→                    </div>
+   418→                  )}
+   419→                </div>
+   420→              ))
+   421→            )}
+   422→          </CardContent>
+   423→        </Card>
+   424→
+   425→        {/* Quick Actions */}
+   426→        <Card className="lg:col-span-1 border-gray-100 shadow-sm">
+   427→          <CardHeader className="pb-3">
+   428→            <CardTitle className="text-base font-semibold text-gray-900">Quick Actions</CardTitle>
+   429→          </CardHeader>
+   430→          <CardContent className="space-y-3">
+   431→            <button
+   432→              onClick={() => onNavigate('shifts')}
+   433→              className="w-full rounded-xl p-3.5 flex items-center gap-3 transition-all active:scale-[0.98] bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow-sm hover:shadow-md"
+   434→            >
+   435→              <div className="bg-white/20 rounded-lg p-2">
+   436→                <Briefcase className="size-5" />
+   437→              </div>
+   438→              <div className="text-left">
+   439→                <p className="text-sm font-semibold">My Shifts</p>
+   440→                <p className="text-[11px] text-blue-100">View & manage shifts</p>
+   441→              </div>
+   442→            </button>
+   443→
+   444→            <button
+   445→              onClick={() => onNavigate('patients')}
+   446→              className="w-full rounded-xl p-3.5 flex items-center gap-3 transition-all active:scale-[0.98] border border-violet-200 bg-violet-50/60 hover:bg-violet-50"
+   447→            >
+   448→              <div className="text-violet-600">
+   449→                <Users className="size-5" />
+   450→              </div>
+   451→              <div className="text-left">
+   452→                <p className="text-sm font-semibold text-gray-900">Care Members</p>
+   453→                <p className="text-[11px] text-gray-400">View all care members</p>
+   454→              </div>
+   455→            </button>
+   456→
+   457→            <button
+   458→              onClick={() => onNavigate('earnings')}
+   459→              className="w-full rounded-xl p-3.5 flex items-center gap-3 transition-all active:scale-[0.98] border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-50"
+   460→            >
+   461→              <div className="text-emerald-600">
+   462→                <Wallet className="size-5" />
+   463→              </div>
+   464→              <div className="text-left">
+   465→                <p className="text-sm font-semibold text-gray-900">Earnings Report</p>
+   466→                <p className="text-[11px] text-gray-400">Track your income</p>
+   467→              </div>
+   468→            </button>
+   469→          </CardContent>
+   470→        </Card>
+   471→      </div>
+   472→
+   473→      {/* ========== Section 4: Today's Schedule (Timeline) ========== */}
+   474→      <Card className="border-gray-100 shadow-sm">
+   475→        <CardHeader className="pb-3">
+   476→          <CardTitle className="text-base font-semibold text-gray-900">Today's Schedule</CardTitle>
+   477→        </CardHeader>
+   478→        <CardContent>
+   479→          {todayShifts.length === 0 ? (
+   480→            <div className="text-center py-8">
+   481→              <Clock className="size-10 text-gray-300 mx-auto mb-2" />
+   482→              <p className="text-sm text-gray-400">No shifts scheduled for today</p>
+   483→            </div>
+   484→          ) : (
+   485→            <div className="relative">
+   486→              {/* Vertical timeline line */}
+   487→              <div className="absolute left-[22px] top-0 bottom-0 w-px bg-gray-200" />
+   488→
+   489→              <div className="space-y-4">
+   490→                {todayShifts.map((shift) => {
+   491→                  const dotColor =
+   492→                    shift.status === 'completed'
+   493→                      ? 'bg-emerald-500'
+   494→                      : shift.status === 'in_progress'
+   495→                        ? 'bg-blue-500'
+   496→                        : shift.status === 'confirmed'
+   497→                          ? 'bg-blue-500'
+   498→                          : 'bg-red-500';
+   499→
+   500→                  const isInProgress = shift.status === 'in_progress';
+   501→                  const isCancelled = shift.status === 'cancelled';
+   502→
+   503→                  return (
+   504→                    <div key={shift.id} className="relative">
+   505→                      {/* Timeline dot */}
+   506→                      <div className="relative left-[17px]">
+   507→                        <div className={`size-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+   508→                        {isInProgress && (
+   509→                          <div className="absolute inset-[-3px] rounded-full bg-blue-400/30 animate-pulse" />
+   510→                        )}
+   511→                      </div>
+   512→
+   513→                      {/* Shift card */}
+   514→                      <div
+   515→                        className={`ml-10 rounded-xl border bg-white p-3 sm:p-4 transition-colors ${
+   516→                          isInProgress
+   517→                            ? 'border-blue-200 bg-blue-50/40 ring-1 ring-blue-200/50'
+   518→                            : isCancelled
+   519→                              ? 'border-red-100 bg-red-50/30 opacity-70'
+   520→                              : 'border-gray-100'
+   521→                        }`}
+   522→                      >
+   523→                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+   524→                          <div>
+   525→                            <p className="text-[11px] font-semibold text-gray-600">
+   526→                              {shift.startTime} – {shift.endTime}
+   527→                            </p>
+   528→                            <p className="text-sm font-semibold text-gray-900 mt-0.5">{shift.patientName}</p>
+   529→                            <p className="text-xs text-gray-500">{shift.serviceType}</p>
+   530→                          </div>
+   531→                          <div className="flex items-center gap-2 shrink-0">
+   532→                            {getModeBadge(shift.consultationMode)}
+   533→                            {getStatusBadge(shift.status)}
+   534→                            {isInProgress && (
+   535→                              <Button
+   536→                                size="sm"
+   537→                                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-lg text-xs h-7 px-2"
+   538→                                onClick={(e) => { e.stopPropagation(); setCompleteShift(shift); }}
+   539→                              >
+   540→                                <CheckCircle2 className="size-3 mr-1" />
+   541→                                Complete
+   542→                              </Button>
+   543→                            )}
+   544→                          </div>
+   545→                        </div>
+   546→                        {shift.consultationMode === 'in_home' && shift.address && (
+   547→                          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+   548→                            <MapPin className="size-3 shrink-0" />
+   549→                            <span className="truncate">{shift.address}</span>
+   550→                          </div>
+   551→                        )}
+   552→                      </div>
+   553→                    </div>
+   554→                  );
+   555→                })}
+   556→              </div>
+   557→            </div>
+   558→          )}
+   559→        </CardContent>
+   560→      </Card>
+   561→
+   562→      {/* ========== Section 5: Earnings Overview ========== */}
+   563→      <Card
+   564→        className="border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all cursor-pointer"
+   565→        onClick={() => onNavigate('earnings')}
+   566→      >
+   567→        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+   568→          <CardTitle className="text-base font-semibold text-gray-900">Earnings Overview</CardTitle>
+   569→          <span className="text-xs text-gray-400">Last 6 months</span>
+   570→        </CardHeader>
+   571→        <CardContent>
+   572→          <div className="h-[200px]">
+   573→            <ResponsiveContainer width="100%" height="100%">
+   574→              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
+   575→                <defs>
+   576→                  <linearGradient id="earningsGradient" x1="0" y1="0" x2="0" y2="1">
+   577→                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+   578→                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.1} />
+   579→                  </linearGradient>
+   580→                </defs>
+   581→                <CartesianGrid strokeDasharray="0" stroke="#f1f5f9" horizontal={true} vertical={false} />
+   582→                <XAxis
+   583→                  dataKey="month"
+   584→                  axisLine={false}
+   585→                  tickLine={false}
+   586→                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+   587→                  dy={8}
+   588→                />
+   589→                <YAxis hide={true} />
+   590→                <Tooltip
+   591→                  contentStyle={{
+   592→                    backgroundColor: '#ffffff',
+   593→                    borderRadius: '12px',
+   594→                    boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
+   595→                    fontSize: '12px',
+   596→                    border: '1px solid #f1f5f9',
+   597→                    padding: '8px 12px',
+   598→                  }}
+   599→                  formatter={(value: number) => [formatCurrency(value), 'Earnings']}
+   600→                />
+   601→                <Area
+   602→                  type="monotone"
+   603→                  dataKey="earnings"
+   604→                  stroke="#3b82f6"
+   605→                  strokeWidth={2}
+   606→                  fill="url(#earningsGradient)"
+   607→                />
+   608→              </AreaChart>
+   609→            </ResponsiveContainer>
+   610→          </div>
+   611→        </CardContent>
+   612→      </Card>
+   613→
+   614→      {/* Shift Complete OTP Modal */}
+   615→      {completeShift && (
+   616→        <ShiftCompleteOTP
+   617→          shiftId={completeShift.id}
+   618→          bookingId={completeShift.bookingId}
+   619→          careMemberName={completeShift.patientName}
+   620→          careMemberPhone={completeShift.patientPhone}
+   621→          serviceType={completeShift.serviceType}
+   622→          serviceCategory={completeShift.serviceCategory}
+   623→          address={completeShift.address || ''}
+   624→          startTime={completeShift.startTime}
+   625→          endTime={completeShift.endTime}
+   626→          earnings={completeShift.earnings}
+   627→          onComplete={(shiftId) => {
+   628→            setCompleteShift(null);
+   629→            setShiftCompleted(true);
+   630→            setTimeout(() => setShiftCompleted(false), 3000);
+   631→          }}
+   632→          onCancel={() => setCompleteShift(null)}
+   633→        />
+   634→      )}
+   635→
+   636→      {shiftCompleted && (
+   637→        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-5">
+   638→          <CheckCircle className="size-4" />
+   639→          Shift completed successfully!
+   640→        </div>
+   641→      )}
+   642→    </div>
+   643→  );
+   644→}
+   645→

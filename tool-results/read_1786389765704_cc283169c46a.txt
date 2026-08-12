@@ -1,0 +1,627 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import {
+     7→  Briefcase,
+     8→  Clock,
+     9→  MapPin,
+    10→  CheckCircle,
+    11→  XCircle,
+    12→  AlertCircle,
+    13→  IndianRupee,
+    14→  CheckCircle2,
+    15→} from 'lucide-react';
+    16→import { mockShifts } from '@/lib/caregiver-data';
+    17→import type { Shift } from '@/lib/caregiver-data';
+    18→import ShiftCheckIn from './ShiftCheckIn';
+    19→import ShiftCompleteOTP from './ShiftCompleteOTP';
+    20→import {
+    21→  Sheet,
+    22→  SheetContent,
+    23→  SheetHeader,
+    24→  SheetTitle,
+    25→} from '@/components/ui/sheet';
+    26→import { format, parseISO, isToday, isTomorrow, isYesterday, isSameDay, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+    27→import { Calendar as CalendarIcon } from 'lucide-react';
+    28→import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+    29→import { Calendar } from '@/components/ui/calendar';
+    30→
+    31→type StatusFilter = 'All' | 'Confirmed' | 'In Progress' | 'Completed' | 'Cancelled' | 'Upcoming';
+    32→
+    33→interface ShiftsViewProps {
+    34→  onNavigate: (view: string) => void;
+    35→}
+    36→
+    37→const statusBadgeMap: Record<string, { label: string; className: string }> = {
+    38→  confirmed: {
+    39→    label: 'Confirmed',
+    40→    className: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100',
+    41→  },
+    42→  in_progress: {
+    43→    label: 'In Progress',
+    44→    className: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100',
+    45→  },
+    46→  completed: {
+    47→    label: 'Completed',
+    48→    className: 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+    49→  },
+    50→  cancelled: {
+    51→    label: 'Cancelled',
+    52→    className: 'bg-red-100 text-red-600 border-red-200 hover:bg-red-100',
+    53→  },
+    54→};
+    55→
+    56→const leftBorderMap: Record<string, string> = {
+    57→  confirmed: 'border-l-blue-500',
+    58→  in_progress: 'border-l-blue-500',
+    59→  completed: 'border-l-emerald-500',
+    60→  cancelled: 'border-l-red-500',
+    61→};
+    62→
+    63→function getDateGroupLabel(dateStr: string): string {
+    64→  const date = parseISO(dateStr);
+    65→  if (isToday(date)) return 'Today';
+    66→  if (isTomorrow(date)) return 'Tomorrow';
+    67→  if (isYesterday(date)) return 'Yesterday';
+    68→  return format(date, 'EEE, MMM d, yyyy');
+    69→}
+    70→
+    71→function getDateGroupSortKey(dateStr: string): number {
+    72→  const date = parseISO(dateStr);
+    73→  if (isToday(date)) return 0;
+    74→  if (isTomorrow(date)) return 1;
+    75→  if (isYesterday(date)) return -1;
+    76→  return date.getTime();
+    77→}
+    78→
+    79→export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
+    80→  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+    81→  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+    82→  const [statusFilter, setStatusFilter] = useState<StatusFilter>('Upcoming');
+    83→  const [startShift, setStartShift] = useState<Shift | null>(null);
+    84→  const [shiftStarted, setShiftStarted] = useState(false);
+    85→  const [completeShift, setCompleteShift] = useState<Shift | null>(null);
+    86→  const [shiftCompleted, setShiftCompleted] = useState(false);
+    87→  const [reportingShift, setReportingShift] = useState<Shift | null>(null);
+    88→  const [detailShift, setDetailShift] = useState<Shift | null>(null);
+    89→
+    90→  // Shifts in the active date range (used for stats counts)
+    91→  const dateRangeShifts = useMemo(() => {
+    92→    return mockShifts.filter((shift) => {
+    93→      const shiftDate = parseISO(shift.date);
+    94→      if (startDate || endDate) {
+    95→        // User picked a custom range
+    96→        if (startDate && shiftDate < startDate && !isSameDay(shiftDate, startDate)) return false;
+    97→        if (endDate && shiftDate > endDate && !isSameDay(shiftDate, endDate)) return false;
+    98→      } else {
+    99→        // Default: current month
+   100→        const now = new Date();
+   101→        const monthStart = startOfMonth(now);
+   102→        const monthEnd = endOfMonth(now);
+   103→        if (!isWithinInterval(shiftDate, { start: monthStart, end: monthEnd })) return false;
+   104→      }
+   105→      return true;
+   106→    });
+   107→  }, [startDate, endDate]);
+   108→
+   109→  const stats = useMemo(() => {
+   110→    const total = dateRangeShifts.length;
+   111→    const completed = dateRangeShifts.filter((s) => s.status === 'completed').length;
+   112→    const upcoming = dateRangeShifts.filter(
+   113→      (s) => s.status === 'confirmed' || s.status === 'in_progress'
+   114→    ).length;
+   115→    const cancelled = dateRangeShifts.filter((s) => s.status === 'cancelled').length;
+   116→    return { total, completed, upcoming, cancelled };
+   117→  }, [dateRangeShifts]);
+   118→
+   119→  const filteredShifts = useMemo(() => {
+   120→    return mockShifts.filter((shift) => {
+   121→      const shiftDate = parseISO(shift.date);
+   122→
+   123→      // Date range filter
+   124→      if (startDate && shiftDate < startDate && !isSameDay(shiftDate, startDate)) return false;
+   125→      if (endDate && shiftDate > endDate && !isSameDay(shiftDate, endDate)) return false;
+   126→
+   127→      // Status filter
+   128→      if (statusFilter === 'Confirmed' && shift.status !== 'confirmed') return false;
+   129→      if (statusFilter === 'In Progress' && shift.status !== 'in_progress') return false;
+   130→      if (statusFilter === 'Completed' && shift.status !== 'completed') return false;
+   131→      if (statusFilter === 'Cancelled' && shift.status !== 'cancelled') return false;
+   132→      if (statusFilter === 'Upcoming' && shift.status !== 'confirmed' && shift.status !== 'in_progress') return false;
+   133→
+   134→      return true;
+   135→    });
+   136→  }, [startDate, endDate, statusFilter, dateRangeShifts]);
+   137→
+   138→  // Group shifts by date
+   139→  const groupedShifts = useMemo(() => {
+   140→    const groups: Record<string, typeof mockShifts> = {};
+   141→
+   142→    for (const shift of filteredShifts) {
+   143→      const label = getDateGroupLabel(shift.date);
+   144→      if (!groups[label]) groups[label] = [];
+   145→      groups[label].push(shift);
+   146→    }
+   147→
+   148→    // Sort groups: Today first, then Tomorrow, then other future dates, then past
+   149→    const sortedEntries = Object.entries(groups).sort(([, a], [, b]) => {
+   150→      const keyA = getDateGroupSortKey(a[0].date);
+   151→      const keyB = getDateGroupSortKey(b[0].date);
+   152→      return keyA - keyB;
+   153→    });
+   154→
+   155→    return sortedEntries;
+   156→  }, [filteredShifts]);
+   157→
+   158→  const statusPills: { key: StatusFilter; label: string; icon: React.ElementType; count: number; color: string; activeColor: string }[] = [
+   159→    { key: 'All', label: 'Total', icon: Briefcase, count: stats.total, color: 'text-gray-500', activeColor: 'text-blue-600 border-blue-300 bg-blue-50 ring-1 ring-blue-100' },
+   160→    { key: 'Upcoming', label: 'Upcoming', icon: Clock, count: stats.upcoming, color: 'text-blue-500', activeColor: 'text-blue-600 border-blue-300 bg-blue-50 ring-1 ring-blue-100' },
+   161→    { key: 'Completed', label: 'Completed', icon: CheckCircle, count: stats.completed, color: 'text-emerald-500', activeColor: 'text-emerald-600 border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100' },
+   162→    { key: 'Cancelled', label: 'Cancelled', icon: XCircle, count: stats.cancelled, color: 'text-red-400', activeColor: 'text-red-600 border-red-300 bg-red-50 ring-1 ring-red-100' },
+   163→  ];
+   164→
+   165→  return (
+   166→    <div className="space-y-5">
+   167→      {/* Section 1: Header + Unified Filter Bar */}
+   168→      <div>
+   169→        <div className="flex items-center gap-2.5 mb-4">
+   170→          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50">
+   171→            <Briefcase className="w-5 h-5 text-blue-600" />
+   172→          </div>
+   173→          <h1 className="text-xl font-bold text-gray-900">My Shifts</h1>
+   174→        </div>
+   175→
+   176→        {/* Unified filter bar: Status pills + Date filters in one row */}
+   177→        <div className="flex items-center gap-2 flex-wrap">
+   178→          {statusPills.map((pill) => {
+   179→            const Icon = pill.icon;
+   180→            const isActive = statusFilter === pill.key;
+   181→            return (
+   182→              <button
+   183→                type="button"
+   184→                key={pill.key}
+   185→                onClick={() => setStatusFilter(pill.key)}
+   186→                className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] cursor-pointer ${
+   187→                  isActive ? pill.activeColor : 'border-gray-100 bg-white hover:border-gray-300'
+   188→                }`}
+   189→              >
+   190→                <Icon className={`w-3.5 h-3.5 ${isActive ? '' : pill.color} transition-colors`} />
+   191→                <span className={`text-xs font-medium ${isActive ? '' : 'text-gray-500'} transition-colors`}>{pill.label}</span>
+   192→                <span className={`text-sm font-bold ${isActive ? '' : pill.color} transition-colors`}>{pill.count}</span>
+   193→              </button>
+   194→            );
+   195→          })}
+   196→
+   197→          {/* Divider */}
+   198→          <div className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
+   199→
+   200→          {/* Start Date Picker */}
+   201→          <Popover>
+   202→            <PopoverTrigger asChild>
+   203→              <button
+   204→                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:shadow-sm ${
+   205→                  startDate
+   206→                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+   207→                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+   208→                }`}
+   209→              >
+   210→                <CalendarIcon className="w-3.5 h-3.5" />
+   211→                {startDate ? format(startDate, 'MMM d, yyyy') : 'Start Date'}
+   212→              </button>
+   213→            </PopoverTrigger>
+   214→            <PopoverContent className="w-auto p-0" align="start">
+   215→              <Calendar
+   216→                mode="single"
+   217→                selected={startDate}
+   218→                onSelect={(date) => setStartDate(date ?? undefined)}
+   219→              />
+   220→            </PopoverContent>
+   221→          </Popover>
+   222→
+   223→          {/* End Date Picker */}
+   224→          <Popover>
+   225→            <PopoverTrigger asChild>
+   226→              <button
+   227→                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:shadow-sm ${
+   228→                  endDate
+   229→                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+   230→                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+   231→                }`}
+   232→              >
+   233→                <CalendarIcon className="w-3.5 h-3.5" />
+   234→                {endDate ? format(endDate, 'MMM d, yyyy') : 'End Date'}
+   235→              </button>
+   236→            </PopoverTrigger>
+   237→            <PopoverContent className="w-auto p-0" align="start">
+   238→              <Calendar
+   239→                mode="single"
+   240→                selected={endDate}
+   241→                onSelect={(date) => setEndDate(date ?? undefined)}
+   242→              />
+   243→            </PopoverContent>
+   244→          </Popover>
+   245→
+   246→          {/* Clear date filter */}
+   247→          {(startDate || endDate) && (
+   248→            <button
+   249→              onClick={() => { setStartDate(undefined); setEndDate(undefined); }}
+   250→              className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+   251→            >
+   252→              ✕ Clear
+   253→            </button>
+   254→          )}
+   255→        </div>
+   256→      </div>
+   257→
+   258→      {/* Section 3: Shifts List */}
+   259→      {groupedShifts.length === 0 ? (
+   260→        <div className="flex flex-col items-center justify-center py-16 text-center">
+   261→          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+   262→            <Briefcase className="w-7 h-7 text-gray-400" />
+   263→          </div>
+   264→          <p className="text-sm font-medium text-gray-500">No shifts found</p>
+   265→          <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+   266→        </div>
+   267→      ) : (
+   268→        <div className="space-y-5">
+   269→          {groupedShifts.map(([groupLabel, shifts]) => (
+   270→            <div key={groupLabel}>
+   271→              <div className="flex items-center gap-2 mb-2">
+   272→                <CalendarIcon className="w-3.5 h-3.5 text-gray-500" />
+   273→                <span className="text-sm font-semibold text-gray-700">{groupLabel}</span>
+   274→                <span className="text-xs text-gray-400">({shifts.length})</span>
+   275→              </div>
+   276→
+   277→              <div className="space-y-3">
+   278→                {shifts.map((shift) => {
+   279→                  const badgeInfo = statusBadgeMap[shift.status];
+   280→                  const borderClass = leftBorderMap[shift.status];
+   281→                  const isInProgress = shift.status === 'in_progress';
+   282→                  const isCancelled = shift.status === 'cancelled';
+   283→
+   284→                  return (
+   285→                    <div
+   286→                      key={shift.id}
+   287→                      className={`rounded-xl border border-gray-100 bg-white p-4 border-l-[3px] ${borderClass} ${isCancelled ? 'opacity-60' : ''}`}
+   288→                    >
+   289→                      {/* Row 1: Time + Status + Earnings */}
+   290→                      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+   291→                        <div className="flex items-center gap-2 flex-wrap">
+   292→                          <div className="flex items-center gap-1.5 text-gray-600">
+   293→                            <Clock className="w-3.5 h-3.5 text-gray-400" />
+   294→                            <span className="text-sm font-medium">
+   295→                              {shift.startTime} - {shift.endTime}
+   296→                            </span>
+   297→                          </div>
+   298→                          <Badge
+   299→                            variant="outline"
+   300→                            className={`text-[11px] px-2 py-0 ${badgeInfo.className}`}
+   301→                          >
+   302→                            {isInProgress && (
+   303→                              <span className="relative flex h-2 w-2 mr-1.5">
+   304→                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+   305→                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+   306→                              </span>
+   307→                            )}
+   308→                            {badgeInfo.label}
+   309→                          </Badge>
+   310→                        </div>
+   311→                        <div className="flex items-center gap-1 text-emerald-600">
+   312→                          <IndianRupee className="w-3.5 h-3.5" />
+   313→                          <span className="text-sm font-semibold">
+   314→                            {shift.earnings > 0
+   315→                              ? `₹${shift.earnings.toLocaleString('en-IN')}`
+   316→                              : '—'}
+   317→                          </span>
+   318→                        </div>
+   319→                      </div>
+   320→
+   321→                      {/* Row 2: Patient name + Service type */}
+   322→                      <div className="flex items-center gap-2 mb-2">
+   323→                        <span className="text-sm font-semibold text-gray-900">
+   324→                          {shift.patientName}
+   325→                        </span>
+   326→                        <span className="text-xs text-gray-400">•</span>
+   327→                        <span className="text-xs text-gray-500">{shift.serviceType}</span>
+   328→                      </div>
+   329→
+   330→                      {/* Row 3: Mode badge + Booking ID */}
+   331→                      <div className="flex items-center gap-2 mb-2">
+   332→                        <Badge
+   333→                          variant="outline"
+   334→                          className={
+   335→                            shift.consultationMode === 'in_home'
+   336→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50 text-[11px] px-2 py-0'
+   337→                              : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 text-[11px] px-2 py-0'
+   338→                          }
+   339→                        >
+   340→                          {shift.consultationMode === 'in_home' ? '🏠 In-Home' : '💻 Online'}
+   341→                        </Badge>
+   342→                        <span className="text-xs text-gray-400 font-mono">{shift.bookingId}</span>
+   343→                      </div>
+   344→
+   345→                      {/* Row 4: Address (if in_home) */}
+   346→                      {shift.consultationMode === 'in_home' && shift.address && (
+   347→                        <div className="flex items-start gap-1.5 mb-2">
+   348→                          <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+   349→                          <span className="text-xs text-gray-500">{shift.address}</span>
+   350→                        </div>
+   351→                      )}
+   352→
+   353→                      {/* Row 5: Notes */}
+   354→                      {shift.notes && (
+   355→                        <div className="bg-gray-50 rounded-lg p-2 mb-2">
+   356→                          <p className="text-xs text-gray-600">{shift.notes}</p>
+   357→                        </div>
+   358→                      )}
+   359→
+   360→                      {/* Row 6: Special Instructions */}
+   361→                      {shift.specialInstructions && (
+   362→                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">
+   363→                          <div className="flex items-start gap-1.5">
+   364→                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+   365→                            <p className="text-xs text-amber-700">{shift.specialInstructions}</p>
+   366→                          </div>
+   367→                        </div>
+   368→                      )}
+   369→
+   370→                      {/* Action Buttons */}
+   371→                      <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+   372→                        {shift.status === 'confirmed' && (
+   373→                          <>
+   374→                            <Button
+   375→                              size="sm"
+   376→                              className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white rounded-lg text-xs h-8 px-3"
+   377→                              onClick={(e) => { e.stopPropagation(); setStartShift(shift); }}
+   378→                            >
+   379→                              Start Shift
+   380→                            </Button>
+   381→                            <Button
+   382→                              variant="outline"
+   383→                              size="sm"
+   384→                              className="rounded-lg text-xs h-8 px-3 text-gray-600"
+   385→                              onClick={() => onNavigate('patients')}
+   386→                            >
+   387→                              View Care Member
+   388→                            </Button>
+   389→                          </>
+   390→                        )}
+   391→                        {shift.status === 'in_progress' && (
+   392→                          <>
+   393→                            <Button
+   394→                              size="sm"
+   395→                              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-lg text-xs h-8 px-3"
+   396→                              onClick={() => setCompleteShift(shift)}
+   397→                            >
+   398→                              <CheckCircle2 className="w-3 h-3 mr-1" />
+   399→                              Complete Shift
+   400→                            </Button>
+   401→                            <Button
+   402→                              variant="outline"
+   403→                              size="sm"
+   404→                              className="rounded-lg text-xs h-8 px-3 text-gray-600"
+   405→                              onClick={() => setReportingShift(shift)}
+   406→                            >
+   407→                              Report Issue
+   408→                            </Button>
+   409→                          </>
+   410→                        )}
+   411→                        {shift.status === 'completed' && (
+   412→                          <>
+   413→                            <Button
+   414→                              variant="outline"
+   415→                              size="sm"
+   416→                              className="rounded-lg text-xs h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+   417→                              onClick={() => setDetailShift(shift)}
+   418→                            >
+   419→                              View Details
+   420→                            </Button>
+   421→                            <div className="flex items-center gap-1 text-emerald-600 ml-auto">
+   422→                              <IndianRupee className="w-3.5 h-3.5" />
+   423→                              <span className="text-sm font-semibold">
+   424→                                ₹{shift.earnings.toLocaleString('en-IN')} earned
+   425→                              </span>
+   426→                            </div>
+   427→                          </>
+   428→                        )}
+   429→                        {shift.status === 'cancelled' && (
+   430→                          <>
+   431→                            <Badge
+   432→                              variant="outline"
+   433→                              className="bg-red-50 text-red-500 border-red-200 text-xs px-2.5 py-0.5"
+   434→                            >
+   435→                              <XCircle className="w-3 h-3 mr-1" />
+   436→                              Cancelled
+   437→                            </Badge>
+   438→                            {shift.notes && (
+   439→                              <span className="text-xs text-gray-400 italic ml-2">
+   440→                                {shift.notes}
+   441→                              </span>
+   442→                            )}
+   443→                          </>
+   444→                        )}
+   445→                      </div>
+   446→                    </div>
+   447→                  );
+   448→                })}
+   449→              </div>
+   450→            </div>
+   451→          ))}
+   452→        </div>
+   453→      )}
+   454→
+   455→      {/* Shift Check-In Modal (Location + Selfie + OTP) */}
+   456→      {startShift && (
+   457→        <ShiftCheckIn
+   458→          shift={startShift}
+   459→          onStart={(shiftId) => {
+   460→            setStartShift(null);
+   461→            setShiftStarted(true);
+   462→            setTimeout(() => setShiftStarted(false), 3000);
+   463→          }}
+   464→          onCancel={() => setStartShift(null)}
+   465→        />
+   466→      )}
+   467→
+   468→      {shiftStarted && (
+   469→        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-5">
+   470→          <CheckCircle className="size-4" />
+   471→          Shift started successfully!
+   472→        </div>
+   473→      )}
+   474→
+   475→      {/* Shift Complete OTP Modal */}
+   476→      {completeShift && (
+   477→        <ShiftCompleteOTP
+   478→          shiftId={completeShift.id}
+   479→          bookingId={completeShift.bookingId}
+   480→          careMemberName={completeShift.patientName}
+   481→          careMemberPhone={completeShift.patientPhone}
+   482→          serviceType={completeShift.serviceType}
+   483→          serviceCategory={completeShift.serviceCategory}
+   484→          address={completeShift.address || ''}
+   485→          startTime={completeShift.startTime}
+   486→          endTime={completeShift.endTime}
+   487→          earnings={completeShift.earnings}
+   488→          onComplete={(shiftId) => {
+   489→            setCompleteShift(null);
+   490→            setShiftCompleted(true);
+   491→            setTimeout(() => setShiftCompleted(false), 3000);
+   492→          }}
+   493→          onCancel={() => setCompleteShift(null)}
+   494→        />
+   495→      )}
+   496→
+   497→      {shiftCompleted && (
+   498→        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-5">
+   499→          <CheckCircle className="size-4" />
+   500→          Shift completed successfully!
+   501→        </div>
+   502→      )}
+   503→
+   504→      {/* Shift Detail Sheet */}
+   505→      <Sheet open={!!detailShift} onOpenChange={(open) => { if (!open) setDetailShift(null); }}>
+   506→        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+   507→          {detailShift && (
+   508→            <>
+   509→              <SheetHeader>
+   510→                <SheetTitle className="flex items-center gap-2">
+   511→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50">
+   512→                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+   513→                  </div>
+   514→                  Shift Details
+   515→                </SheetTitle>
+   516→              </SheetHeader>
+   517→
+   518→              <div className="mt-4 space-y-4">
+   519→                {/* Status & Date */}
+   520→                <div className="flex items-center justify-between">
+   521→                  <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs px-2.5 py-0.5">
+   522→                    <CheckCircle className="w-3 h-3 mr-1" />
+   523→                    Completed
+   524→                  </Badge>
+   525→                  <span className="text-xs text-gray-500">{format(parseISO(detailShift.date), 'EEEE, MMMM d, yyyy')}</span>
+   526→                </div>
+   527→
+   528→                {/* Time */}
+   529→                <div className="flex items-center gap-2 text-gray-700">
+   530→                  <Clock className="w-4 h-4 text-gray-400" />
+   531→                  <span className="text-sm font-medium">{detailShift.startTime} — {detailShift.endTime}</span>
+   532→                </div>
+   533→
+   534→                {/* Patient */}
+   535→                <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-2">
+   536→                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Care Member</p>
+   537→                  <p className="text-sm font-semibold text-gray-900">{detailShift.patientName}</p>
+   538→                  <p className="text-xs text-gray-500">{detailShift.serviceType}</p>
+   539→                </div>
+   540→
+   541→                {/* Mode + Booking */}
+   542→                <div className="flex items-center gap-2 flex-wrap">
+   543→                  <Badge
+   544→                    variant="outline"
+   545→                    className={
+   546→                      detailShift.consultationMode === 'in_home'
+   547→                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-2 py-0'
+   548→                        : 'bg-blue-50 text-blue-700 border-blue-200 text-[11px] px-2 py-0'
+   549→                    }
+   550→                  >
+   551→                    {detailShift.consultationMode === 'in_home' ? '🏠 In-Home' : '💻 Online'}
+   552→                  </Badge>
+   553→                  <span className="text-xs text-gray-400 font-mono">{detailShift.bookingId}</span>
+   554→                </div>
+   555→
+   556→                {/* Address */}
+   557→                {detailShift.consultationMode === 'in_home' && detailShift.address && (
+   558→                  <div className="flex items-start gap-2">
+   559→                    <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+   560→                    <span className="text-xs text-gray-600">{detailShift.address}</span>
+   561→                  </div>
+   562→                )}
+   563→
+   564→                {/* Notes */}
+   565→                {detailShift.notes && (
+   566→                  <div className="rounded-lg bg-gray-50 p-3">
+   567→                    <p className="text-xs font-medium text-gray-400 mb-1">Notes</p>
+   568→                    <p className="text-xs text-gray-600">{detailShift.notes}</p>
+   569→                  </div>
+   570→                )}
+   571→
+   572→                {/* Special Instructions */}
+   573→                {detailShift.specialInstructions && (
+   574→                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+   575→                    <div className="flex items-start gap-1.5">
+   576→                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+   577→                      <div>
+   578→                        <p className="text-xs font-medium text-amber-700 mb-0.5">Special Instructions</p>
+   579→                        <p className="text-xs text-amber-700">{detailShift.specialInstructions}</p>
+   580→                      </div>
+   581→                    </div>
+   582→                  </div>
+   583→                )}
+   584→
+   585→                {/* Earnings */}
+   586→                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 flex items-center justify-between">
+   587→                  <span className="text-xs font-medium text-emerald-700">Earnings</span>
+   588→                  <div className="flex items-center gap-1 text-emerald-700">
+   589→                    <IndianRupee className="w-4 h-4" />
+   590→                    <span className="text-lg font-bold">₹{detailShift.earnings.toLocaleString('en-IN')}</span>
+   591→                  </div>
+   592→                </div>
+   593→              </div>
+   594→            </>
+   595→          )}
+   596→        </SheetContent>
+   597→      </Sheet>
+   598→
+   599→      {/* Report Issue Dialog */}
+   600→      {reportingShift && (
+   601→        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setReportingShift(null)}>
+   602→          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+   603→            <h3 className="text-lg font-semibold text-gray-900 mb-2">Report Issue</h3>
+   604→            <p className="text-sm text-gray-500 mb-4">
+   605→              Reporting an issue for shift with <span className="font-medium text-gray-700">{reportingShift.patientName}</span> on {format(parseISO(reportingShift.date), 'MMMM d, yyyy')}
+   606→            </p>
+   607→            <div className="space-y-3 mb-5">
+   608→              {['Client not available', 'Safety concern', 'Address mismatch', 'Service dispute', 'Equipment issue', 'Other'].map((reason) => (
+   609→                <button
+   610→                  key={reason}
+   611→                  onClick={() => { setReportingShift(null); }}
+   612→                  className="w-full text-left px-4 py-2.5 rounded-lg border border-gray-100 text-sm text-gray-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors cursor-pointer"
+   613→                >
+   614→                  {reason}
+   615→                </button>
+   616→              ))}
+   617→            </div>
+   618→            <Button variant="outline" className="w-full" onClick={() => setReportingShift(null)}>
+   619→              Cancel
+   620→            </Button>
+   621→          </div>
+   622→        </div>
+   623→      )}
+   624→    </div>
+   625→  );
+   626→}
+   627→

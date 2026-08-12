@@ -1,0 +1,758 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect } from "react";
+     4→     4→import {
+     5→     5→  Calendar,
+     6→     6→  IndianRupee,
+     7→     7→  Users,
+     8→     8→  FileText,
+     9→     9→  Clock,
+    10→    10→  Video,
+    11→    11→  ArrowRight,
+    12→    12→  Stethoscope,
+    13→    13→  PenTool,
+    14→    14→  Activity,
+    15→    15→} from "lucide-react";
+    16→    16→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    17→    17→import { Badge } from "@/components/ui/badge";
+    18→    18→import { Button } from "@/components/ui/button";
+    19→    19→import { Skeleton } from "@/components/ui/skeleton";
+    20→    20→import {
+    21→    21→  AreaChart,
+    22→    22→  Area,
+    23→    23→  XAxis,
+    24→    24→  YAxis,
+    25→    25→  CartesianGrid,
+    26→    26→  Tooltip,
+    27→    27→  ResponsiveContainer,
+    28→    28→} from "recharts";
+    29→    29→import { cn } from "@/lib/utils";
+    30→    30→
+    31→    31→// ---------------------------------------------------------------------------
+    32→    32→// Types
+    33→    33→// ---------------------------------------------------------------------------
+    34→    34→
+    35→    35→interface DashboardViewProps {
+    36→    36→  doctorId: string;
+    37→    37→  doctorName?: string;
+    38→    38→  doctorSpecialization?: string;
+    39→    39→  onViewPatients: () => void;
+    40→    40→  onViewCalendar: () => void;
+    41→    41→  onViewPrescriptions: (bookingId: string, patientName: string) => void;
+    42→    42→}
+    43→    43→
+    44→    44→interface AnalyticsSummary {
+    45→    45→  todayAppointments: number;
+    46→    46→  weekEarnings: number;
+    47→    47→  totalPatients: number;
+    48→    48→  pendingPrescriptions: number;
+    49→    49→}
+    50→    50→
+    51→    51→interface MonthlyRevenue {
+    52→    52→  month: string;
+    53→    53→  earnings: number;
+    54→    54→  appointments: number;
+    55→    55→  online: number;
+    56→    56→  offline: number;
+    57→    57→}
+    58→    58→
+    59→    59→interface UpcomingBooking {
+    60→    60→  id: string;
+    61→    61→  patient?: { id: string; name: string } | null;
+    62→    62→  serviceName: string;
+    63→    63→  mode: string;
+    64→    64→  date: string;
+    65→    65→  timeSlot: string;
+    66→    66→  status: string;
+    67→    67→}
+    68→    68→
+    69→    69→interface TodaysBooking {
+    70→    70→  id: string;
+    71→    71→  patient?: { id: string; name: string } | null;
+    72→    72→  serviceName: string;
+    73→    73→  mode: string;
+    74→    74→  date: string;
+    75→    75→  timeSlot: string;
+    76→    76→  status: string;
+    77→    77→  prescriptions?: unknown[];
+    78→    78→}
+    79→    79→
+    80→    80→interface AnalyticsData {
+    81→    81→  summary: AnalyticsSummary;
+    82→    82→  monthlyRevenue: MonthlyRevenue[];
+    83→    83→  upcomingBookings: UpcomingBooking[];
+    84→    84→  todaysBookings: TodaysBooking[];
+    85→    85→}
+    86→    86→
+    87→    87→// ---------------------------------------------------------------------------
+    88→    88→// Helpers
+    89→    89→// ---------------------------------------------------------------------------
+    90→    90→
+    91→    91→function formatCurrency(amount: number): string {
+    92→    92→  return new Intl.NumberFormat("en-IN", {
+    93→    93→    style: "currency",
+    94→    94→    currency: "INR",
+    95→    95→    minimumFractionDigits: 0,
+    96→    96→    maximumFractionDigits: 0,
+    97→    97→  }).format(amount);
+    98→    98→}
+    99→    99→
+   100→   100→function getGreeting(): string {
+   101→   101→  const hour = new Date().getHours();
+   102→   102→  if (hour < 12) return "Good Morning";
+   103→   103→  if (hour < 17) return "Good Afternoon";
+   104→   104→  return "Good Evening";
+   105→   105→}
+   106→   106→
+   107→   107→function formatTodayDate(): string {
+   108→   108→  return new Date().toLocaleDateString("en-IN", {
+   109→   109→    weekday: "long",
+   110→   110→    year: "numeric",
+   111→   111→    month: "long",
+   112→   112→    day: "numeric",
+   113→   113→  });
+   114→   114→}
+   115→   115→
+   116→   116→function getStatusBadgeClasses(status: string): string {
+   117→   117→  switch (status) {
+   118→   118→    case "confirmed":
+   119→   119→      return "bg-blue-100 text-blue-700 border-blue-200";
+   120→   120→    case "in-progress":
+   121→   121→      return "bg-blue-100 text-blue-800 border-blue-200";
+   122→   122→    case "completed":
+   123→   123→      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+   124→   124→    case "cancelled":
+   125→   125→    case "no-show":
+   126→   126→      return "bg-red-100 text-red-700 border-red-200";
+   127→   127→    case "pending":
+   128→   128→    default:
+   129→   129→      return "bg-amber-100 text-amber-700 border-amber-200";
+   130→   130→  }
+   131→   131→}
+   132→   132→
+   133→   133→function getStatusLabel(status: string): string {
+   134→   134→  switch (status) {
+   135→   135→    case "in-progress":
+   136→   136→      return "In Progress";
+   137→   137→    case "no-show":
+   138→   138→      return "No Show";
+   139→   139→    default:
+   140→   140→      return status.charAt(0).toUpperCase() + status.slice(1);
+   141→   141→  }
+   142→   142→}
+   143→   143→
+   144→   144→// ===========================================================================
+   145→   145→// Component
+   146→   146→// ===========================================================================
+   147→   147→
+   148→   148→export default function DashboardView({
+   149→   149→  doctorId,
+   150→   150→  doctorName = "Doctor",
+   151→   151→  doctorSpecialization = "General Physician",
+   152→   152→  onViewPatients,
+   153→   153→  onViewCalendar,
+   154→   154→  onViewPrescriptions,
+   155→   155→}: DashboardViewProps) {
+   156→   156→  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+   157→   157→  const [loading, setLoading] = useState(true);
+   158→   158→
+   159→   159→  // Fetch analytics data
+   160→   160→  useEffect(() => {
+   161→   161→    if (!doctorId) return;
+   162→   162→
+   163→   163→    let cancelled = false;
+   164→   164→
+   165→   165→    async function fetchAnalytics() {
+   166→   166→      try {
+   167→   167→        const res = await fetch(`/api/analytics?doctorId=${encodeURIComponent(doctorId)}`);
+   168→   168→        if (!res.ok) throw new Error("Failed to fetch analytics");
+   169→   169→        const data = await res.json();
+   170→   170→        if (!cancelled) {
+   171→   171→          setAnalytics(data);
+   172→   172→          setLoading(false);
+   173→   173→        }
+   174→   174→      } catch (err) {
+   175→   175→        console.error("Dashboard analytics fetch error:", err);
+   176→   176→        if (!cancelled) setLoading(false);
+   177→   177→      }
+   178→   178→    }
+   179→   179→
+   180→   180→    fetchAnalytics();
+   181→   181→    return () => {
+   182→   182→      cancelled = true;
+   183→   183→    };
+   184→   184→  }, [doctorId]);
+   185→   185→
+   186→   186→  // =======================================================================
+   187→   187→  // Loading Skeleton
+   188→   188→  // =======================================================================
+   189→   189→
+   190→   190→  if (loading || !analytics) {
+   191→   191→    return (
+   192→   192→      <div className="space-y-6 p-4 md:p-6">
+   193→   193→        {/* Welcome skeleton */}
+   194→   194→        <div className="space-y-3">
+   195→   195→          <Skeleton className="h-8 w-64" />
+   196→   196→          <Skeleton className="h-4 w-44" />
+   197→   197→          <Skeleton className="h-1.5 w-full max-w-xs rounded-full" />
+   198→   198→        </div>
+   199→   199→
+   200→   200→        {/* Stats skeleton */}
+   201→   201→        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+   202→   202→          {[...Array(4)].map((_, i) => (
+   203→   203→            <Skeleton key={i} className="h-28 rounded-xl" />
+   204→   204→          ))}
+   205→   205→        </div>
+   206→   206→
+   207→   207→        {/* Two-column skeleton */}
+   208→   208→        <div className="grid gap-4 lg:grid-cols-3">
+   209→   209→          <div className="lg:col-span-2 space-y-3">
+   210→   210→            <Skeleton className="h-6 w-48" />
+   211→   211→            <Skeleton className="h-24 rounded-xl" />
+   212→   212→            <Skeleton className="h-24 rounded-xl" />
+   213→   213→            <Skeleton className="h-24 rounded-xl" />
+   214→   214→          </div>
+   215→   215→          <div className="space-y-3">
+   216→   216→            <Skeleton className="h-6 w-32" />
+   217→   217→            <Skeleton className="h-24 rounded-xl" />
+   218→   218→            <Skeleton className="h-24 rounded-xl" />
+   219→   219→            <Skeleton className="h-24 rounded-xl" />
+   220→   220→          </div>
+   221→   221→        </div>
+   222→   222→
+   223→   223→        {/* Schedule skeleton */}
+   224→   224→        <Skeleton className="h-6 w-40" />
+   225→   225→        <div className="space-y-4">
+   226→   226→          {[...Array(3)].map((_, i) => (
+   227→   227→            <Skeleton key={i} className="h-20 rounded-xl" />
+   228→   228→          ))}
+   229→   229→        </div>
+   230→   230→
+   231→   231→        {/* Chart skeleton */}
+   232→   232→        <Skeleton className="h-[200px] rounded-xl" />
+   233→   233→      </div>
+   234→   234→    );
+   235→   235→  }
+   236→   236→
+   237→   237→  // =======================================================================
+   238→   238→  // Render
+   239→   239→  // =======================================================================
+   240→   240→
+   241→   241→  const { summary, monthlyRevenue, upcomingBookings, todaysBookings } = analytics;
+   242→   242→
+   243→   243→  // Stats card definitions
+   244→   244→  const statsCards = [
+   245→   245→    {
+   246→   246→      label: "Today's Appointments",
+   247→   247→      value: summary.todayAppointments,
+   248→   248→      sublabel: "today",
+   249→   249→      icon: Calendar,
+   250→   250→      colorClass: "bg-blue-600",
+   251→   251→      lightBg: "bg-blue-50",
+   252→   252→      textColor: "text-blue-700",
+   253→   253→    },
+   254→   254→    {
+   255→   255→      label: "This Week's Earnings",
+   256→   256→      value: formatCurrency(summary.weekEarnings),
+   257→   257→      sublabel: "this week",
+   258→   258→      icon: IndianRupee,
+   259→   259→      colorClass: "bg-emerald-500",
+   260→   260→      lightBg: "bg-emerald-50",
+   261→   261→      textColor: "text-emerald-600",
+   262→   262→    },
+   263→   263→    {
+   264→   264→      label: "Total Patients",
+   265→   265→      value: summary.totalPatients,
+   266→   266→      sublabel: "total",
+   267→   267→      icon: Users,
+   268→   268→      colorClass: "bg-violet-500",
+   269→   269→      lightBg: "bg-violet-50",
+   270→   270→      textColor: "text-violet-600",
+   271→   271→    },
+   272→   272→    {
+   273→   273→      label: "Pending Prescriptions",
+   274→   274→      value: summary.pendingPrescriptions,
+   275→   275→      sublabel: "pending",
+   276→   276→      icon: FileText,
+   277→   277→      colorClass: "bg-amber-500",
+   278→   278→      lightBg: "bg-amber-50",
+   279→   279→      textColor: "text-amber-600",
+   280→   280→    },
+   281→   281→  ];
+   282→   282→
+   283→   283→  return (
+   284→   284→    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+   285→   285→      {/* ================================================================ */}
+   286→   286→      {/* 1. Welcome Header                                                */}
+   287→   287→      {/* ================================================================ */}
+   288→   288→      <section aria-label="Welcome header">
+   289→   289→        <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+   290→   290→          {/* Rose gradient accent bar */}
+   291→   291→          <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
+   292→   292→
+   293→   293→          <div className="flex flex-col gap-1 p-5 pt-5 md:flex-row md:items-center md:justify-between md:p-6 md:pt-6">
+   294→   294→            <div>
+   295→   295→              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
+   296→   296→                {getGreeting()}, Dr. {doctorName}
+   297→   297→              </h1>
+   298→   298→              <p className="mt-1 text-sm text-gray-500">{formatTodayDate()}</p>
+   299→   299→              <p className="mt-0.5 text-xs font-medium text-blue-600">
+   300→   300→                {doctorSpecialization}
+   301→   301→              </p>
+   302→   302→            </div>
+   303→   303→            <div className="mt-3 flex items-center gap-2 md:mt-0">
+   304→   304→              <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5">
+   305→   305→                <Activity className="h-3.5 w-3.5 text-emerald-600" />
+   306→   306→                <span className="text-xs font-medium text-emerald-700">
+   307→   307→                  {summary.todayAppointments > 0
+   308→   308→                    ? `${summary.todayAppointments} appointment${summary.todayAppointments > 1 ? "s" : ""} today`
+   309→   309→                    : "No appointments today"}
+   310→   310→                </span>
+   311→   311→              </div>
+   312→   312→            </div>
+   313→   313→          </div>
+   314→   314→        </div>
+   315→   315→      </section>
+   316→   316→
+   317→   317→      {/* ================================================================ */}
+   318→   318→      {/* 2. Stats Cards (2x2 mobile, 4 cols desktop)                     */}
+   319→   319→      {/* ================================================================ */}
+   320→   320→      <section aria-label="Statistics overview">
+   321→   321→        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+   322→   322→          {statsCards.map((card) => {
+   323→   323→            const Icon = card.icon;
+   324→   324→            return (
+   325→   325→              <Card
+   326→   326→                key={card.label}
+   327→   327→                className="relative overflow-hidden border-gray-100 shadow-sm py-5"
+   328→   328→              >
+   329→   329→                <CardContent className="p-4">
+   330→   330→                  <div className="flex items-start justify-between">
+   331→   331→                    <div className="space-y-1">
+   332→   332→                      <p className="text-xs font-medium text-gray-500">
+   333→   333→                        {card.label}
+   334→   334→                      </p>
+   335→   335→                      <p className="text-xl font-bold text-gray-900 sm:text-2xl">
+   336→   336→                        {card.value}
+   337→   337→                      </p>
+   338→   338→                      <p className="text-[11px] text-gray-400">{card.sublabel}</p>
+   339→   339→                    </div>
+   340→   340→                    <div
+   341→   341→                      className={cn(
+   342→   342→                        "flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm",
+   343→   343→                        card.colorClass
+   344→   344→                      )}
+   345→   345→                    >
+   346→   346→                      <Icon className="h-5 w-5 text-white" />
+   347→   347→                    </div>
+   348→   348→                  </div>
+   349→   349→                </CardContent>
+   350→   350→              </Card>
+   351→   351→            );
+   352→   352→          })}
+   353→   353→        </div>
+   354→   354→      </section>
+   355→   355→
+   356→   356→      {/* ================================================================ */}
+   357→   357→      {/* 3. Two-Column: Upcoming Appointments + Quick Actions              */}
+   358→   358→      {/* ================================================================ */}
+   359→   359→      <section aria-label="Upcoming appointments and quick actions">
+   360→   360→        <div className="grid gap-4 lg:grid-cols-3">
+   361→   361→          {/* Left: Upcoming Appointments */}
+   362→   362→          <Card className="lg:col-span-2 border-gray-100 shadow-sm">
+   363→   363→            <CardHeader className="flex flex-row items-center justify-between pb-2">
+   364→   364→              <CardTitle className="text-base font-semibold text-gray-900">
+   365→   365→                Upcoming Appointments
+   366→   366→              </CardTitle>
+   367→   367→              <Button
+   368→   368→                variant="ghost"
+   369→   369→                size="sm"
+   370→   370→                className="h-8 gap-1 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+   371→   371→                onClick={onViewCalendar}
+   372→   372→              >
+   373→   373→                View All
+   374→   374→                <ArrowRight className="h-3.5 w-3.5" />
+   375→   375→              </Button>
+   376→   376→            </CardHeader>
+   377→   377→            <CardContent className="pt-0">
+   378→   378→              {upcomingBookings.length === 0 ? (
+   379→   379→                <div className="flex flex-col items-center justify-center py-10 text-center">
+   380→   380→                  <div className="flex size-14 items-center justify-center rounded-full bg-gray-100">
+   381→   381→                    <Calendar className="h-6 w-6 text-gray-400" />
+   382→   382→                  </div>
+   383→   383→                  <p className="mt-3 text-sm font-medium text-gray-600">
+   384→   384→                    No upcoming appointments
+   385→   385→                  </p>
+   386→   386→                  <p className="mt-1 text-xs text-gray-400">
+   387→   387→                    Your upcoming bookings will appear here
+   388→   388→                  </p>
+   389→   389→                </div>
+   390→   390→              ) : (
+   391→   391→                <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+   392→   392→                  {upcomingBookings.map((booking) => (
+   393→   393→                    <div
+   394→   394→                      key={booking.id}
+   395→   395→                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 transition-colors hover:border-blue-200 hover:bg-blue-50/30 sm:p-4"
+   396→   396→                    >
+   397→   397→                      {/* Time badge */}
+   398→   398→                      <div className="flex flex-col items-center shrink-0 rounded-lg bg-gray-50 px-2.5 py-1.5 sm:px-3 sm:py-2">
+   399→   399→                        <Clock className="mb-1 h-3.5 w-3.5 text-gray-400" />
+   400→   400→                        <span className="text-[11px] font-semibold text-gray-700 sm:text-xs">
+   401→   401→                          {booking.timeSlot}
+   402→   402→                        </span>
+   403→   403→                      </div>
+   404→   404→
+   405→   405→                      {/* Patient info */}
+   406→   406→                      <div className="min-w-0 flex-1">
+   407→   407→                        <p className="truncate text-sm font-semibold text-gray-900">
+   408→   408→                          {booking.patient?.name ?? "Unknown Patient"}
+   409→   409→                        </p>
+   410→   410→                        <p className="mt-0.5 truncate text-xs text-gray-500">
+   411→   411→                          {booking.serviceName}
+   412→   412→                        </p>
+   413→   413→                        {/* Mode badge */}
+   414→   414→                        <Badge
+   415→   415→                          variant="outline"
+   416→   416→                          className={cn(
+   417→   417→                            "mt-1.5 text-[10px] font-medium px-1.5 py-0",
+   418→   418→                            booking.mode === "online"
+   419→   419→                              ? "border-blue-200 bg-blue-50 text-blue-700"
+   420→   420→                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+   421→   421→                          )}
+   422→   422→                        >
+   423→   423→                          {booking.mode === "online" ? (
+   424→   424→                            <Video className="mr-1 h-2.5 w-2.5" />
+   425→   425→                          ) : (
+   426→   426→                            <Stethoscope className="mr-1 h-2.5 w-2.5" />
+   427→   427→                          )}
+   428→   428→                          {booking.mode === "online" ? "Online" : "Physical"}
+   429→   429→                        </Badge>
+   430→   430→                      </div>
+   431→   431→
+   432→   432→                      {/* View button */}
+   433→   433→                      <Button
+   434→   434→                        variant="outline"
+   435→   435→                        size="sm"
+   436→   436→                        className="shrink-0 h-8 gap-1 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+   437→   437→                        onClick={() =>
+   438→   438→                          onViewPrescriptions(
+   439→   439→                            booking.id,
+   440→   440→                            booking.patient?.name ?? "Unknown Patient"
+   441→   441→                          )
+   442→   442→                        }
+   443→   443→                      >
+   444→   444→                        View
+   445→   445→                      </Button>
+   446→   446→                    </div>
+   447→   447→                  ))}
+   448→   448→                </div>
+   449→   449→              )}
+   450→   450→            </CardContent>
+   451→   451→          </Card>
+   452→   452→
+   453→   453→          {/* Right: Quick Actions */}
+   454→   454→          <div className="space-y-4">
+   455→   455→            <Card className="border-gray-100 shadow-sm py-5">
+   456→   456→              <CardHeader className="pb-2">
+   457→   457→                <CardTitle className="text-base font-semibold text-gray-900">
+   458→   458→                  Quick Actions
+   459→   459→                </CardTitle>
+   460→   460→              </CardHeader>
+   461→   461→              <CardContent className="pt-0 space-y-3">
+   462→   462→                {/* New Prescription */}
+   463→   463→                <button
+   464→   464→                  onClick={() => onViewPrescriptions("", "")}
+   465→   465→                  className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-500 p-3.5 text-left text-white shadow-sm transition-all hover:shadow-md hover:from-blue-700 hover:to-indigo-600 active:scale-[0.98]"
+   466→   466→                >
+   467→   467→                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+   468→   468→                    <PenTool className="h-5 w-5" />
+   469→   469→                  </div>
+   470→   470→                  <div>
+   471→   471→                    <p className="text-sm font-semibold">New Prescription</p>
+   472→   472→                    <p className="text-[11px] text-blue-100">
+   473→   473→                      Write a new prescription
+   474→   474→                    </p>
+   475→   475→                  </div>
+   476→   476→                  <ArrowRight className="ml-auto h-4 w-4 opacity-70" />
+   477→   477→                </button>
+   478→   478→
+   479→   479→                {/* View Calendar */}
+   480→   480→                <button
+   481→   481→                  onClick={onViewCalendar}
+   482→   482→                  className="flex w-full items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 text-left transition-all hover:bg-blue-100/60 hover:border-blue-300 active:scale-[0.98]"
+   483→   483→                >
+   484→   484→                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500">
+   485→   485→                    <Calendar className="h-5 w-5 text-white" />
+   486→   486→                  </div>
+   487→   487→                  <div>
+   488→   488→                    <p className="text-sm font-semibold text-blue-900">
+   489→   489→                      View Calendar
+   490→   490→                    </p>
+   491→   491→                    <p className="text-[11px] text-blue-600">
+   492→   492→                      Manage your schedule
+   493→   493→                    </p>
+   494→   494→                  </div>
+   495→   495→                  <ArrowRight className="ml-auto h-4 w-4 text-blue-400" />
+   496→   496→                </button>
+   497→   497→
+   498→   498→                {/* Patient Directory */}
+   499→   499→                <button
+   500→   500→                  onClick={onViewPatients}
+   501→   501→                  className="flex w-full items-center gap-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3.5 text-left transition-all hover:bg-violet-100/60 hover:border-violet-300 active:scale-[0.98]"
+   502→   502→                >
+   503→   503→                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-violet-500">
+   504→   504→                    <Users className="h-5 w-5 text-white" />
+   505→   505→                  </div>
+   506→   506→                  <div>
+   507→   507→                    <p className="text-sm font-semibold text-violet-900">
+   508→   508→                      Patient Directory
+   509→   509→                    </p>
+   510→   510→                    <p className="text-[11px] text-violet-600">
+   511→   511→                      Browse all patients
+   512→   512→                    </p>
+   513→   513→                  </div>
+   514→   514→                  <ArrowRight className="ml-auto h-4 w-4 text-violet-400" />
+   515→   515→                </button>
+   516→   516→              </CardContent>
+   517→   517→            </Card>
+   518→   518→          </div>
+   519→   519→        </div>
+   520→   520→      </section>
+   521→   521→
+   522→   522→      {/* ================================================================ */}
+   523→   523→      {/* 4. Today's Schedule (Timeline)                                    */}
+   524→   524→      {/* ================================================================ */}
+   525→   525→      <section aria-label="Today's schedule">
+   526→   526→        <Card className="border-gray-100 shadow-sm">
+   527→   527→          <CardHeader className="flex flex-row items-center justify-between pb-2">
+   528→   528→            <CardTitle className="text-base font-semibold text-gray-900">
+   529→   529→              Today&apos;s Schedule
+   530→   530→            </CardTitle>
+   531→   531→            <Badge variant="outline" className="text-[11px] font-normal text-gray-500 border-gray-200">
+   532→   532→              <Clock className="mr-1 h-3 w-3" />
+   533→   533→              {todaysBookings.length} booking{todaysBookings.length !== 1 ? "s" : ""}
+   534→   534→            </Badge>
+   535→   535→          </CardHeader>
+   536→   536→          <CardContent className="pt-0">
+   537→   537→            {todaysBookings.length === 0 ? (
+   538→   538→              <div className="flex flex-col items-center justify-center py-10 text-center">
+   539→   539→                <div className="flex size-14 items-center justify-center rounded-full bg-gray-100">
+   540→   540→                  <Calendar className="h-6 w-6 text-gray-400" />
+   541→   541→                </div>
+   542→   542→                <p className="mt-3 text-sm font-medium text-gray-600">
+   543→   543→                  No bookings scheduled for today
+   544→   544→                </p>
+   545→   545→                <p className="mt-1 text-xs text-gray-400">
+   546→   546→                  Take some time to relax or review past prescriptions
+   547→   547→                </p>
+   548→   548→              </div>
+   549→   549→            ) : (
+   550→   550→              <div className="relative max-h-96 overflow-y-auto custom-scrollbar pr-1">
+   551→   551→                {/* Vertical timeline line */}
+   552→   552→                <div className="absolute left-[22px] top-0 bottom-0 w-px bg-gray-200" />
+   553→   553→
+   554→   554→                <div className="space-y-4">
+   555→   555→                  {todaysBookings.map((booking, idx) => {
+   556→   556→                    const isLast = idx === todaysBookings.length - 1;
+   557→   557→                    const hasPrescription =
+   558→   558→                      booking.prescriptions && booking.prescriptions.length > 0;
+   559→   559→                    const needsPrescription =
+   560→   560→                      booking.status === "completed" && !hasPrescription;
+   561→   561→
+   562→   562→                    return (
+   563→   563→                      <div key={booking.id} className="relative flex gap-4">
+   564→   564→                        {/* Timeline dot + time */}
+   565→   565→                        <div className="relative z-10 flex flex-col items-center shrink-0 w-[44px]">
+   566→   566→                          <div
+   567→   567→                            className={cn(
+   568→   568→                              "flex size-[10px] rounded-full border-2 border-white shadow-sm mt-1",
+   569→   569→                              booking.status === "completed"
+   570→   570→                                ? "bg-emerald-500"
+   571→   571→                                : booking.status === "in-progress"
+   572→   572→                                  ? "bg-blue-600 animate-pulse"
+   573→   573→                                  : booking.status === "cancelled"
+   574→   574→                                    ? "bg-red-400"
+   575→   575→                                    : booking.status === "confirmed"
+   576→   576→                                      ? "bg-blue-500"
+   577→   577→                                      : "bg-amber-400"
+   578→   578→                            )}
+   579→   579→                          />
+   580→   580→                          <span className="mt-1.5 text-[11px] font-semibold text-gray-600 whitespace-nowrap">
+   581→   581→                            {booking.timeSlot?.split(" - ")[0] ?? ""}
+   582→   582→                          </span>
+   583→   583→                        </div>
+   584→   584→
+   585→   585→                        {/* Patient card */}
+   586→   586→                        <div
+   587→   587→                          className={cn(
+   588→   588→                            "flex-1 rounded-xl border p-3 sm:p-4 transition-colors",
+   589→   589→                            isLast ? "" : "mb-0",
+   590→   590→                            booking.status === "cancelled"
+   591→   591→                              ? "border-red-100 bg-red-50/30 opacity-70"
+   592→   592→                              : booking.status === "in-progress"
+   593→   593→                                ? "border-blue-200 bg-blue-50/40 ring-1 ring-blue-200/50"
+   594→   594→                                : "border-gray-100 bg-white hover:border-gray-200"
+   595→   595→                          )}
+   596→   596→                        >
+   597→   597→                          <div className="flex flex-wrap items-start justify-between gap-2">
+   598→   598→                            <div className="min-w-0 flex-1">
+   599→   599→                              <div className="flex flex-wrap items-center gap-2">
+   600→   600→                                <p className="text-sm font-semibold text-gray-900">
+   601→   601→                                  {booking.patient?.name ?? "Unknown Patient"}
+   602→   602→                                </p>
+   603→   603→                                {/* Status badge */}
+   604→   604→                                <Badge
+   605→   605→                                  variant="outline"
+   606→   606→                                  className={cn(
+   607→   607→                                    "text-[10px] font-medium px-1.5 py-0",
+   608→   608→                                    getStatusBadgeClasses(booking.status)
+   609→   609→                                  )}
+   610→   610→                                >
+   611→   611→                                  {getStatusLabel(booking.status)}
+   612→   612→                                </Badge>
+   613→   613→                              </div>
+   614→   614→                              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+   615→   615→                                <span className="inline-flex items-center gap-1">
+   616→   616→                                  <Stethoscope className="h-3 w-3 text-gray-400" />
+   617→   617→                                  {booking.serviceName}
+   618→   618→                                </span>
+   619→   619→                                <Badge
+   620→   620→                                  variant="outline"
+   621→   621→                                  className={cn(
+   622→   622→                                    "text-[10px] font-medium px-1.5 py-0",
+   623→   623→                                    booking.mode === "online"
+   624→   624→                                      ? "border-blue-200 bg-blue-50 text-blue-600"
+   625→   625→                                      : "border-emerald-200 bg-emerald-50 text-emerald-600"
+   626→   626→                                  )}
+   627→   627→                                >
+   628→   628→                                  {booking.mode === "online" ? (
+   629→   629→                                    <Video className="mr-0.5 h-2.5 w-2.5" />
+   630→   630→                                  ) : (
+   631→   631→                                    <Stethoscope className="mr-0.5 h-2.5 w-2.5" />
+   632→   632→                                  )}
+   633→   633→                                  {booking.mode === "online" ? "Online" : "Physical"}
+   634→   634→                                </Badge>
+   635→   635→                                <span className="inline-flex items-center gap-1">
+   636→   636→                                  <Clock className="h-3 w-3 text-gray-400" />
+   637→   637→                                  {booking.timeSlot}
+   638→   638→                                </span>
+   639→   639→                              </div>
+   640→   640→                            </div>
+   641→   641→
+   642→   642→                            {/* Action button */}
+   643→   643→                            {needsPrescription && (
+   644→   644→                              <Button
+   645→   645→                                size="sm"
+   646→   646→                                className="h-8 gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-500 text-xs font-medium text-white shadow-sm hover:from-blue-700 hover:to-indigo-600 shrink-0"
+   647→   647→                                onClick={() =>
+   648→   648→                                  onViewPrescriptions(
+   649→   649→                                    booking.id,
+   650→   650→                                    booking.patient?.name ?? "Unknown Patient"
+   651→   651→                                  )
+   652→   652→                                }
+   653→   653→                              >
+   654→   654→                                <PenTool className="h-3 w-3" />
+   655→   655→                                Write Prescription
+   656→   656→                              </Button>
+   657→   657→                            )}
+   658→   658→                          </div>
+   659→   659→                        </div>
+   660→   660→                      </div>
+   661→   661→                    );
+   662→   662→                  })}
+   663→   663→                </div>
+   664→   664→              </div>
+   665→   665→            )}
+   666→   666→          </CardContent>
+   667→   667→        </Card>
+   668→   668→      </section>
+   669→   669→
+   670→   670→      {/* ================================================================ */}
+   671→   671→      {/* 5. Revenue Chart (Area Chart - last 6 months)                   */}
+   672→   672→      {/* ================================================================ */}
+   673→   673→      <section aria-label="Revenue chart">
+   674→   674→        <Card className="border-gray-100 shadow-sm">
+   675→   675→          <CardHeader className="flex flex-row items-center justify-between pb-2">
+   676→   676→            <CardTitle className="text-base font-semibold text-gray-900">
+   677→   677→              Revenue Overview
+   678→   678→            </CardTitle>
+   679→   679→            <span className="text-xs text-gray-400">Last 6 months</span>
+   680→   680→          </CardHeader>
+   681→   681→          <CardContent className="pt-0">
+   682→   682→            <div className="h-[200px] w-full">
+   683→   683→              <ResponsiveContainer width="100%" height="100%">
+   684→   684→                <AreaChart
+   685→   685→                  data={monthlyRevenue}
+   686→   686→                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+   687→   687→                >
+   688→   688→                  <defs>
+   689→   689→                    <linearGradient id="roseGradient" x1="0" y1="0" x2="0" y2="1">
+   690→   690→                      <stop offset="5%" stopColor="#fb7185" stopOpacity={0.3} />
+   691→   691→                      <stop offset="95%" stopColor="#fb7185" stopOpacity={0.02} />
+   692→   692→                    </linearGradient>
+   693→   693→                  </defs>
+   694→   694→                  <CartesianGrid
+   695→   695→                    strokeDasharray="3 3"
+   696→   696→                    stroke="#f1f5f9"
+   697→   697→                    vertical={false}
+   698→   698→                  />
+   699→   699→                  <XAxis
+   700→   700→                    dataKey="month"
+   701→   701→                    axisLine={false}
+   702→   702→                    tickLine={false}
+   703→   703→                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+   704→   704→                    dy={8}
+   705→   705→                  />
+   706→   706→                  <YAxis
+   707→   707→                    axisLine={false}
+   708→   708→                    tickLine={false}
+   709→   709→                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+   710→   710→                    tickFormatter={(val: number) =>
+   711→   711→                      val >= 1000 ? `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k` : String(val)
+   712→   712→                    }
+   713→   713→                    dx={-4}
+   714→   714→                  />
+   715→   715→                  <Tooltip
+   716→   716→                    contentStyle={{
+   717→   717→                      backgroundColor: "#fff",
+   718→   718→                      border: "1px solid #e2e8f0",
+   719→   719→                      borderRadius: "10px",
+   720→   720→                      boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
+   721→   721→                      fontSize: "12px",
+   722→   722→                      padding: "8px 12px",
+   723→   723→                    }}
+   724→   724→                    labelStyle={{
+   725→   725→                      fontWeight: 600,
+   726→   726→                      color: "#1f2937",
+   727→   727→                      marginBottom: "4px",
+   728→   728→                    }}
+   729→   729→                    formatter={(value: number) => [
+   730→   730→                      formatCurrency(value),
+   731→   731→                      "Earnings",
+   732→   732→                    ]}
+   733→   733→                  />
+   734→   734→                  <Area
+   735→   735→                    type="monotone"
+   736→   736→                    dataKey="earnings"
+   737→   737→                    stroke="#fb7185"
+   738→   738→                    strokeWidth={2.5}
+   739→   739→                    fill="url(#roseGradient)"
+   740→   740→                    dot={{ r: 4, fill: "#fb7185", stroke: "#fff", strokeWidth: 2 }}
+   741→   741→                    activeDot={{
+   742→   742→                      r: 6,
+   743→   743→                      fill: "#e11d48",
+   744→   744→                      stroke: "#fff",
+   745→   745→                      strokeWidth: 2,
+   746→   746→                    }}
+   747→   747→                  />
+   748→   748→                </AreaChart>
+   749→   749→              </ResponsiveContainer>
+   750→   750→            </div>
+   751→   751→          </CardContent>
+   752→   752→        </Card>
+   753→   753→      </section>
+   754→   754→    </div>
+   755→   755→  );
+   756→   756→}
+   757→   757→export { DashboardView };
+   758→   758→
