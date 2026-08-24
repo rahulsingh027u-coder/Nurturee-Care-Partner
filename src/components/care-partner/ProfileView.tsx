@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ import { mockCarePartner, mockShifts, mockReviews } from '@/lib/care-partner-dat
 import SOSEmergencyDialog from './SOSEmergencyDialog';
 import { getStoredOnboarding, SKILLS_CATALOG, SERVICES_CATALOG } from '@/lib/onboarding-data';
 import type { SkillLevel } from '@/lib/onboarding-data';
-import { VERIFICATION_STORAGE_KEY, STORAGE_VERSION_KEY, CURRENT_STORAGE_VERSION } from '@/lib/constants';
+
 
 interface SelectedSkill {
   name: string;
@@ -92,9 +92,9 @@ interface VerificationDoc {
 
 interface ProfileViewProps {
   onNavigate?: (view: string) => void;
+  partnerId?: string;
 }
-
-export default function ProfileView({ onNavigate }: ProfileViewProps) {
+export default function ProfileView({ onNavigate, partnerId }: ProfileViewProps) {
   // Read onboarding data if available (filled during signup wizard)
   const onboardingData = typeof window !== 'undefined' ? getStoredOnboarding() : null;
 
@@ -138,38 +138,52 @@ export default function ProfileView({ onNavigate }: ProfileViewProps) {
   const [isAvailable, setIsAvailable] = useState(mockCarePartner.isAvailable);
   const [sosOpen, setSosOpen] = useState(false);
 
-  // Read verification docs from localStorage — must match VerificationPage's storage format
+  // Fetch verification docs from live API instead of localStorage
+  const defaultDocs: VerificationDoc[] = [
+    { id: 'v-aadhaar', type: 'aadhaar', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+    { id: 'v-police', type: 'police', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+    { id: 'v-medical', type: 'medical', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+    { id: 'v-video', type: 'video', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
+  ];
+  const [verificationDocs, setVerificationDocs] = useState<VerificationDoc[]>(defaultDocs);
 
-  const getStoredVerificationDocs = (): VerificationDoc[] => {
-    try {
-      // Version check — if storage format is outdated, clear and start fresh
-      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
-      if (storedVersion !== String(CURRENT_STORAGE_VERSION)) {
-        localStorage.removeItem(VERIFICATION_STORAGE_KEY);
-        localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_STORAGE_VERSION));
-        // Fall through to fresh defaults
-      } else {
-        const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length === 4) {
-            return parsed;
-          }
-        }
-      }
-    } catch {
-      // fall through
-    }
-    // Fresh defaults — all NOT started (no fake approved data)
-    return [
-      { id: 'v-aadhaar', type: 'aadhaar', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
-      { id: 'v-police', type: 'police', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
-      { id: 'v-medical', type: 'medical', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
-      { id: 'v-video', type: 'video', status: 'not_started', attempts: [], currentDraft: { documents: [], formFields: {} } },
-    ];
-  };
-
-  const verificationDocs = useMemo(() => getStoredVerificationDocs(), []);
+  useEffect(() => {
+    if (!partnerId) return;
+    fetch('/api/verification/status?partnerId=' + encodeURIComponent(partnerId))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success || !Array.isArray(data.verifications)) return;
+        const typeMap: Record<string, VerificationType> = {
+          aadhaar: 'aadhaar', police: 'police', medical: 'medical', video: 'video'
+        };
+        const statusMap: Record<string, VerificationStatus> = {
+          approved: 'approved', rejected: 'rejected', submitted: 'submitted',
+          under_review: 'under_review', max_attempts_reached: 'max_attempts_reached',
+          suspended: 'max_attempts_reached'
+        };
+        const updated = defaultDocs.map((def) => {
+          const match = (data.verifications || []).find(
+            (v: { package: string }) => v.package === def.type
+          );
+          if (!match) return def;
+          return {
+            ...def,
+            status: statusMap[match.status] || def.status,
+            attempts: Array.from({ length: match.attemptCount || 0 }, (_, i) => ({
+              attemptNumber: i + 1,
+              submittedAt: match.submittedAt || '',
+              documents: (match.documents || []).map((d: { name: string; type: string; url?: string }, j: number) => ({
+                id: 'doc-' + j, name: d.name || 'Document', size: 0, type: d.type || 'application/pdf'
+              })),
+              formFields: {},
+              status: match.status === 'approved' ? 'approved' as VerificationStatus : 'rejected' as VerificationStatus,
+            })),
+          };
+        });
+        setVerificationDocs(updated);
+      })
+      .catch(() => {});
+  }, [partnerId]);
 
   const initials = profile.name
     .split(' ')

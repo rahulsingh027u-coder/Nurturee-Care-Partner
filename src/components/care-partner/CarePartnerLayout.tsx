@@ -72,7 +72,7 @@ export default function CarePartnerLayout({
         {/* Logo Area */}
         <div className="flex items-center gap-3 px-5 py-5">
           <Image
-            src="/nurturee-icon.png"
+            src="/logo.svg"
             alt="Nurturee"
             width={40}
             height={40}
@@ -141,7 +141,7 @@ export default function CarePartnerLayout({
           {/* Logo Area */}
           <div className="flex items-center gap-3 px-5 py-5">
             <Image
-              src="/nurturee-icon.png"
+              src="/logo.svg"
               alt="Nurturee"
               width={40}
               height={40}

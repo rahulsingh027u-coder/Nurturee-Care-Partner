@@ -1,95 +1,127 @@
 'use client'
 
-import { useState, useRef, useEffect } from "react"
-import { Phone, Lock, Loader2, AlertCircle, Shield } from "lucide-react"
-import Image from "next/image"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-  InputOTPSeparator,
-} from "@/components/ui/input-otp"
+import { useState, useEffect } from 'react'
+import { Phone, Loader2, Shield, Lock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp'
 
 interface CarePartnerLoginProps {
-  onLogin: (phone: string) => void
+  onLogin: (phone: string, partnerData: any) => void
 }
 
 export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
   const [step, setStep] = useState<1 | 2>(1)
-  const [phone, setPhone] = useState("")
-  const [otp, setOtp] = useState("")
-  const [error, setError] = useState("")
+  const [phone, setPhone] = useState('')
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [resendTimer, setResendTimer] = useState(0)
-  const phoneInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (resendTimer <= 0) return
-    const interval = setInterval(() => {
-      setResendTimer((prev) => prev - 1)
-    }, 1000)
-    return () => clearInterval(interval)
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
+      return () => clearTimeout(timer)
+    }
   }, [resendTimer])
 
-  useEffect(() => {
-    phoneInputRef.current?.focus()
-  }, [])
-
   const handlePhoneSubmit = async () => {
-    const digits = phone.replace(/\D/g, "")
-    if (digits.length !== 10) {
-      setError("Please enter a valid 10-digit phone number")
+    const cleanPhone = phone.replace(/\D/g, '')
+    if (cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit phone number')
       return
     }
-    setError("")
+
     setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setLoading(false)
-    setStep(2)
-    setResendTimer(30)
+    setError('')
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone })
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to send OTP')
+        return
+      }
+
+      setStep(2)
+      setResendTimer(30)
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleOtpSubmit = async () => {
     if (otp.length !== 6) {
-      setError("Please enter the complete 6-digit OTP")
+      setError('Please enter the complete 6-digit OTP')
       return
     }
-    if (otp !== "123456") {
-      setError("Invalid OTP. Please try again.")
-      return
-    }
-    setError("")
+
     setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setLoading(false)
-    const fullPhone = `+91${phone.replace(/\D/g, "")}`
-    onLogin(fullPhone)
+    setError('')
+
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phone.replace(/\D/g, ''),
+          otp
+        })
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Invalid OTP')
+        return
+      }
+
+      onLogin(phone.replace(/\D/g, ''), data.partner)
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleResendOtp = () => {
-    if (resendTimer > 0) return
-    setOtp("")
-    setError("")
-    setResendTimer(30)
+  const handleResendOtp = async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.replace(/\D/g, '') })
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to resend OTP')
+      } else {
+        setResendTimer(30)
+      }
+    } catch {
+      setError('Network error. Please try again.')
+    }
+    setLoading(false)
   }
 
   const handleBackToPhone = () => {
     setStep(1)
-    setOtp("")
-    setError("")
+    setOtp('')
+    setError('')
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      if (step === 1) {
-        handlePhoneSubmit()
-      } else {
-        handleOtpSubmit()
-      }
-    }
-  }
+  const resendBtnClass = resendTimer > 0 || loading
+    ? 'text-gray-400 cursor-not-allowed'
+    : 'text-blue-600 hover:text-blue-700 font-medium'
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -102,7 +134,7 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
         </div>
         <div className="relative z-10 text-center max-w-md">
           <div className="flex items-center justify-center mb-6">
-            <Image src="/nurturee-icon.png" alt="Nurturee" width={40} height={40} className="mr-3 rounded-xl" />
+            <img src="/logo.svg" alt="Nurturee" width={40} height={40} className="mr-3 rounded-xl" />
             <span className="text-4xl font-bold tracking-tight">Nurturee</span>
           </div>
           <h1 className="text-2xl font-semibold mb-3 text-white/95">Welcome, Care Partner</h1>
@@ -125,7 +157,7 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
           {/* Mobile-only branding */}
           <div className="md:hidden text-center mb-8">
             <div className="flex items-center justify-center mb-2">
-              <Image src="/nurturee-icon.png" alt="Nurturee" width={28} height={28} className="mr-2 rounded-lg" />
+              <img src="/logo.svg" alt="Nurturee" width={28} height={28} className="mr-2 rounded-lg" />
               <span className="text-3xl font-bold text-gray-900 tracking-tight">Nurturee</span>
             </div>
             <p className="text-sm text-gray-500">Care Partner</p>
@@ -135,19 +167,19 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
             {/* Header */}
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                {step === 1 ? "Welcome Back" : "Verify OTP"}
+                {step === 1 ? 'Welcome Back' : 'Verify OTP'}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
                 {step === 1
-                  ? "Sign in to manage your care schedule"
-                  : `Enter the OTP sent to +91 ${phone.replace(/\D/g, "")}`}
+                  ? 'Sign in to manage your care schedule'
+                  : `Enter the OTP sent to +91 ${phone.replace(/\D/g, '')}`}
               </p>
             </div>
 
             {/* Error Alert */}
             {error && (
               <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 text-sm mb-4">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+                <Lock className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -164,16 +196,15 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
                       +91
                     </div>
                     <Input
-                      ref={phoneInputRef}
                       type="tel"
                       placeholder="Enter 10-digit number"
                       value={phone}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "").slice(0, 10)
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10)
                         setPhone(val)
-                        if (error) setError("")
+                        if (error) setError('')
                       }}
-                      onKeyDown={handleKeyDown}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handlePhoneSubmit() }}
                       className="rounded-l-none rounded-md border-input"
                       disabled={loading}
                       maxLength={10}
@@ -184,10 +215,10 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
                 <Button
                   type="button"
                   onClick={handlePhoneSubmit}
-                  disabled={loading || phone.replace(/\D/g, "").length !== 10}
+                  disabled={loading || phone.replace(/\D/g, '').length !== 10}
                   className={
                     'w-full rounded-xl shadow-md h-11 text-sm font-medium transition-all ' +
-                    (phone.replace(/\D/g, "").length === 10 && !loading
+                    (phone.replace(/\D/g, '').length === 10 && !loading
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700'
                       : 'bg-gray-200 text-gray-500 cursor-not-allowed')
                   }
@@ -220,7 +251,7 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
                       value={otp}
                       onChange={(value) => {
                         setOtp(value)
-                        if (error) setError("")
+                        if (error) setError('')
                       }}
                     >
                       <InputOTPGroup>
@@ -262,21 +293,17 @@ export default function CarePartnerLogin({ onLogin }: CarePartnerLoginProps) {
                     onClick={handleBackToPhone}
                     className="text-gray-500 hover:text-gray-700 transition-colors"
                   >
-                    ← Change number
+                    &larr; Change number
                   </button>
                   <button
                     type="button"
                     onClick={handleResendOtp}
-                    disabled={resendTimer > 0}
-                    className={`transition-colors ${
-                      resendTimer > 0
-                        ? "text-gray-400 cursor-not-allowed"
-                        : "text-blue-600 hover:text-blue-700 font-medium"
-                    }`}
+                    disabled={resendTimer > 0 || loading}
+                    className={resendBtnClass}
                   >
                     {resendTimer > 0
                       ? `Resend in ${resendTimer}s`
-                      : "Resend OTP"}
+                      : 'Resend OTP'}
                   </button>
                 </div>
               </div>

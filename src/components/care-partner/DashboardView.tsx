@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   AreaChart,
   Area,
@@ -55,6 +55,7 @@ interface DashboardViewProps {
   carePartnerName: string;
   specialty: string;
   onNavigate: (view: string, patientId?: string) => void;
+  partnerId?: string;
 }
 
 function getGreeting(): string {
@@ -121,7 +122,7 @@ function getModeBadge(mode: string) {
   );
 }
 
-export default function DashboardView({ carePartnerName, specialty, onNavigate }: DashboardViewProps) {
+export default function DashboardView({ carePartnerName, specialty, onNavigate, partnerId }: DashboardViewProps) {
   const [completeShift, setCompleteShift] = useState<typeof mockShifts[number] | null>(null);
   const [shiftCompleted, setShiftCompleted] = useState(false);
   const [detailShift, setDetailShift] = useState<Shift | null>(null);
@@ -129,20 +130,25 @@ export default function DashboardView({ carePartnerName, specialty, onNavigate }
   const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const [sosOpen, setSosOpen] = useState(false);
 
-  // Check optional verification status
-  const getOptionalPendingCount = (): number => {
-    try {
-      const stored = localStorage.getItem('nurturee_care_partner_verification');
-      if (!stored) return 3; // nothing submitted = all pending
-      const docs = JSON.parse(stored);
-      const optional = docs.filter((d: { type: string; status: string }) =>
-        d.type !== 'aadhaar' && d.status !== 'approved' && d.status !== 'max_attempts_reached'
-      );
-      return optional.length;
-    } catch { return 0; }
-  };
+  // Check optional verification status from live API
+  const [optionalPendingCount, setOptionalPendingCount] = useState(3);
 
-  const optionalPendingCount = !dismissVerificationBanner ? getOptionalPendingCount() : 0;
+  useEffect(() => {
+    if (!partnerId) return;
+    fetch('/api/verification/status?partnerId=' + encodeURIComponent(partnerId))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) return;
+        const docs = data.verifications || [];
+        const pending = docs.filter((d: { package: string; status: string }) =>
+          d.package !== 'aadhaar' && d.status !== 'approved' && d.status !== 'max_attempts_reached'
+        );
+        setOptionalPendingCount(pending.length);
+      })
+      .catch(() => {});
+  }, [partnerId]);
+
+  const displayOptionalCount = dismissVerificationBanner ? 0 : optionalPendingCount;
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
@@ -212,7 +218,7 @@ export default function DashboardView({ carePartnerName, specialty, onNavigate }
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-amber-800">Complete Your Verification</p>
-            <p className="text-xs text-amber-600">{optionalPendingCount} optional verification{optionalPendingCount > 1 ? 's' : ''} pending</p>
+            <p className="text-xs text-amber-600">{displayOptionalCount} optional verification{optionalPendingCount > 1 ? 's' : ''} pending</p>
           </div>
           <button
             onClick={() => onNavigate('verification')}

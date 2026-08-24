@@ -244,7 +244,7 @@ export default function OnboardingWizard({ phone, onComplete }: OnboardingWizard
         <div className="max-w-lg mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Image src="/nurturee-icon.png" alt="Nurturee" width={28} height={28} className="rounded-lg" />
+              <Image src="/logo.svg" alt="Nurturee" width={28} height={28} className="rounded-lg" />
               <span className="text-lg font-bold text-gray-900 tracking-tight">Nurturee</span>
             </div>
             <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 bg-blue-50">

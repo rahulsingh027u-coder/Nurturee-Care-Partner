@@ -41,3 +41,5 @@ start.sh
 # ide
 .vscode/
 .idea/
+=
+prisma/schema.prisma.bak

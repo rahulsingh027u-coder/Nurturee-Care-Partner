@@ -1,5 +1,4 @@
-'use client'
-
+'use client';
 import { useState, useEffect } from 'react'
 import CarePartnerLogin from '@/components/care-partner/CarePartnerLogin'
 import OnboardingWizard from '@/components/care-partner/OnboardingWizard'
@@ -15,38 +14,31 @@ import ProfileView from '@/components/care-partner/ProfileView'
 import NotificationsView from '@/components/care-partner/NotificationsView'
 import VerificationPage from '@/components/care-partner/VerificationPage'
 import TermsAcceptance from '@/components/care-partner/TermsAcceptance'
-import { mockCarePartner, mockNotifications } from '@/lib/care-partner-data'
+import { mockNotifications } from '@/lib/care-partner-data'
 import type { Notification, Shift } from '@/lib/care-partner-data'
 import { isOnboarded, getStoredOnboarding } from '@/lib/onboarding-data'
 import {
-  CARE_PARTNER_REGISTERED_KEY,
   AADHAAR_PASSED_KEY,
-  VERIFICATION_STORAGE_KEY,
-  STORAGE_VERSION_KEY,
-  CURRENT_STORAGE_VERSION,
   TERMS_ACCEPTED_KEY,
 } from '@/lib/constants'
 
 type AuthState = 'login' | 'onboarding' | 'pending_verification' | 'terms_acceptance' | 'authenticated'
 
-function isAadhaarVerified(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    // Check storage version — if outdated, treat as unverified
-    if (localStorage.getItem(STORAGE_VERSION_KEY) !== String(CURRENT_STORAGE_VERSION)) return false
-    const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY)
-    if (!stored) return false
-    const docs = JSON.parse(stored)
-    const aadhaarDoc = Array.isArray(docs) && docs.find((d: { type: string }) => d.type === 'aadhaar')
-    return aadhaarDoc?.status === 'approved'
-  } catch {
-    return false
-  }
-}
-
-function isRegistered(): boolean {
-  if (typeof window === 'undefined') return false
-  return localStorage.getItem(CARE_PARTNER_REGISTERED_KEY) === 'true'
+interface PartnerData {
+  id: string
+  caregiverId: string
+  name: string
+  phone: string
+  email: string
+  specialty: string
+  experience: number
+  qualifications: string
+  isVerified: boolean
+  aadhaarVerified: boolean
+  policeVerified: boolean
+  medicalFitness: boolean
+  videoVerified: boolean
+  isSuspended: boolean
 }
 
 export default function CarePartnerPortal() {
@@ -56,54 +48,101 @@ export default function CarePartnerPortal() {
   const [scheduleStartShift, setScheduleStartShift] = useState<Shift | null>(null)
   const [shiftStarted, setShiftStarted] = useState(false)
   const [preselectPatientId, setPreselectPatientId] = useState<string | null>(null)
-  const [loginPhone, setLoginPhone] = useState('')
+  const [partnerData, setPartnerData] = useState<PartnerData | null>(null)
 
   // Hydration: restore auth state from localStorage
   useEffect(() => {
-    const passed = localStorage.getItem(AADHAAR_PASSED_KEY) === 'true'
-    // If registered AND (Aadhaar verified OR aadhaar passed key set), go straight to dashboard
-    // Also allow pre-onboarding verified users to bypass
-    if (isRegistered() && (passed || isAadhaarVerified()) && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') {
-      setAuthState('authenticated')
-    } else if (isRegistered() && (passed || isAadhaarVerified())) {
-      setAuthState('terms_acceptance')
+    const storedPartner = localStorage.getItem('care_partner_data')
+    if (storedPartner) {
+      try {
+        const parsed = JSON.parse(storedPartner)
+        setPartnerData(parsed)
+        if (parsed.isVerified && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') {
+          setAuthState('authenticated')
+        } else if (parsed.isVerified) {
+          setAuthState('terms_acceptance')
+        } else if (isOnboarded()) {
+          setAuthState('pending_verification')
+        } else {
+          setAuthState('onboarding')
+        }
+      } catch {
+        // ignore corrupt data
+      }
     }
   }, [])
 
-  const handleLogin = (phone: string) => {
-    const wasAlreadyRegistered = isRegistered()
-    const alreadyVerified = isAadhaarVerified()
-    const alreadyOnboarded = isOnboarded()
-    const passed = localStorage.getItem(AADHAAR_PASSED_KEY) === 'true'
-    setLoginPhone(phone)
+  const handleLogin = (phone: string, data: PartnerData) => {
+    setPartnerData(data)
+    localStorage.setItem('care_partner_data', JSON.stringify(data))
 
-    if ((wasAlreadyRegistered && alreadyVerified && alreadyOnboarded && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') ||
-        (wasAlreadyRegistered && passed && alreadyOnboarded && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true')) {
-      // Returning user — verified, onboarded & terms accepted, go to dashboard
+    if (data.isVerified && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') {
       setAuthState('authenticated')
-    } else if (wasAlreadyRegistered && alreadyVerified && !alreadyOnboarded) {
-      // Verified user from before onboarding feature — go straight to dashboard
-      setAuthState('authenticated')
-    } else if (wasAlreadyRegistered && alreadyOnboarded && !alreadyVerified) {
-      // Onboarded but not verified — go to verification
+    } else if (data.isVerified) {
+      setAuthState('terms_acceptance')
+    } else if (isOnboarded()) {
       setAuthState('pending_verification')
-    } else if (wasAlreadyRegistered && !alreadyOnboarded) {
-      // Started registration but didn't finish onboarding — resume onboarding
-      setAuthState('onboarding')
     } else {
-      // BRAND NEW USER — first time ever
-      localStorage.setItem(CARE_PARTNER_REGISTERED_KEY, 'true')
       setAuthState('onboarding')
     }
   }
 
-  const handleOnboardingComplete = () => {
-    // Onboarding data saved — now go to verification
+  const handleOnboardingComplete = async () => {
+    // 1. Save ALL onboarding data (skills, services, certs, availability) to DB
+    const onboardingData = getStoredOnboarding()
+    if (onboardingData && partnerData) {
+      try {
+        // Save full onboarding data to new onboarding/save API
+        await fetch('/api/onboarding/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: partnerData.phone,
+            name: onboardingData.name,
+            email: onboardingData.email,
+            specialty: onboardingData.specialty,
+            experience: onboardingData.experience,
+            qualifications: onboardingData.qualifications,
+            skills: onboardingData.skills || [],
+            services: onboardingData.services || [],
+            certifications: onboardingData.certifications || [],
+            availability: onboardingData.availability || [],
+          }),
+        })
+
+        // Also update basic profile fields via PATCH
+        const res = await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: partnerData.phone,
+            name: onboardingData.name,
+            email: onboardingData.email,
+            qualifications: onboardingData.qualifications,
+            experience: onboardingData.experience,
+            specialty: onboardingData.specialty,
+          }),
+        })
+        const json = await res.json()
+        if (json.success && json.partner) {
+          const updated = { ...partnerData, ...json.partner }
+          setPartnerData(updated)
+          localStorage.setItem('care_partner_data', JSON.stringify(updated))
+        }
+      } catch (err) {
+        console.error('Failed to save onboarding data:', err)
+      }
+    }
     setAuthState('pending_verification')
   }
 
   const handleVerificationComplete = () => {
     localStorage.setItem(AADHAAR_PASSED_KEY, 'true')
+    if (partnerData) {
+      const updated = { ...partnerData, isVerified: true, aadhaarVerified: true }
+      setPartnerData(updated)
+      localStorage.setItem('care_partner_data', JSON.stringify(updated))
+    }
     setAuthState('terms_acceptance')
   }
 
@@ -114,7 +153,6 @@ export default function CarePartnerPortal() {
   }
 
   const handleSignOut = () => {
-    // Don't clear registration or verification data — just log out
     setAuthState('login')
     setActiveView('dashboard')
   }
@@ -124,14 +162,14 @@ export default function CarePartnerPortal() {
     setActiveView(view)
   }
 
-  // Read onboarding data for display (falls back to mock)
-  const onboarded = getStoredOnboarding()
-  const displayName = onboarded?.name || mockCarePartner.name
-  const displaySpecialty = onboarded?.specialty === 'elder_care'
+  // Partner display info from real DB data
+  const displayName = partnerData?.name || 'Care Partner'
+  const displaySpecialty = partnerData?.specialty === 'elder_care'
     ? 'Elder Care Specialist'
-    : onboarded?.specialty === 'child_care'
+    : partnerData?.specialty === 'child_care'
       ? 'Child Care Specialist'
-      : mockCarePartner.specialty === 'elder_care' ? 'Elder Care Specialist' : 'Child Care Specialist'
+      : 'Care Partner'
+  const displayPartnerId = partnerData?.caregiverId || 'CP-000'
 
   // Login screen
   if (authState === 'login') {
@@ -142,26 +180,27 @@ export default function CarePartnerPortal() {
     )
   }
 
-  // Onboarding wizard (first-time users)
+  // Onboarding wizard (personal details, skills, services, availability)
   if (authState === 'onboarding') {
     return (
       <OnboardingWizard
-        phone={loginPhone}
+        phone={partnerData?.phone || ''}
         onComplete={handleOnboardingComplete}
       />
     )
   }
 
-  // Mandatory verification screen (after onboarding / Aadhaar not yet done)
+  // Mandatory verification screen
   if (authState === 'pending_verification') {
     return (
       <VerificationPage
+        partnerId={partnerData?.id}
         onComplete={handleVerificationComplete}
       />
     )
   }
 
-  // Terms & Privacy acceptance (after verification, before dashboard)
+  // Terms & Privacy acceptance
   if (authState === 'terms_acceptance') {
     return (
       <TermsAcceptance onAccept={handleTermsAccepted} />
@@ -177,6 +216,7 @@ export default function CarePartnerPortal() {
             carePartnerName={displayName}
             specialty={displaySpecialty}
             onNavigate={handleNavigate}
+            partnerId={partnerData?.id}
           />
         )
       case 'schedule':
@@ -195,13 +235,14 @@ export default function CarePartnerPortal() {
       case 'earnings':
         return <EarningsView />
       case 'profile':
-        return <ProfileView onNavigate={handleNavigate} />
+        return <ProfileView onNavigate={handleNavigate} partnerId={partnerData?.id} />
       case 'notifications':
         return <NotificationsView />
       case 'verification':
         return (
           <VerificationPage
             optionalMode
+            partnerId={partnerData?.id}
             onComplete={() => setActiveView('profile')}
           />
         )
@@ -211,6 +252,7 @@ export default function CarePartnerPortal() {
             carePartnerName={displayName}
             specialty={displaySpecialty}
             onNavigate={handleNavigate}
+            partnerId={partnerData?.id}
           />
         )
     }
@@ -231,7 +273,7 @@ export default function CarePartnerPortal() {
   return (
     <CarePartnerLayout
       carePartnerName={displayName}
-      carePartnerId={onboarded?.name ? onboarded.name.toLowerCase().replace(/\s+/g, '-') + '-cp' : mockCarePartner.carePartnerId}
+      carePartnerId={displayPartnerId}
       activeView={activeView}
       onViewChange={setActiveView}
       notifications={notifications}
@@ -246,7 +288,7 @@ export default function CarePartnerPortal() {
         {renderView()}
       </div>
 
-      {/* Schedule Start Shift Check-In (Location + Selfie + OTP) */}
+      {/* Schedule Start Shift Check-In */}
       {scheduleStartShift && (
         <ShiftCheckIn
           shift={scheduleStartShift}
@@ -260,7 +302,7 @@ export default function CarePartnerPortal() {
       )}
       {shiftStarted && (
         <div className="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-5">
-          ✓ Shift started successfully!
+          Shift started successfully!
         </div>
       )}
     </CarePartnerLayout>

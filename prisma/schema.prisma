@@ -1,32 +1,355 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Admin {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  password       String
+  role           String    @default("super_admin")
+  permissions    String    @default("{}")
+  activeBranches String    @default("[]")
+  isActive       Boolean   @default(true)
+  assignedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  assignedSubUsers SubUser[] @relation("AssignedBy")
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model SubUser {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  password       String
+  permissions    String    @default("{}")
+  activeBranches String    @default("[]")
+  isActive       Boolean   @default(true)
+  assignedBy     String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  assigner Admin @relation("AssignedBy", fields: [assignedBy], references: [id])
+}
+
+model Caregiver {
+  id                  String    @id @default(cuid())
+  caregiverId         String    @unique
+  phone               String
+  name                String?
+  email               String?
+  profilePhoto        String?
+  gender              String?
+  dateOfBirth         DateTime?
+  specialty           String?
+  experience          Int?
+  qualifications      String?
+  bio                 String?
+  languages           String?
+  city                String?
+  state               String?
+  address             String?
+  pincode             String?
+  isVerified          Boolean   @default(false)
+  aadhaarVerified     Boolean   @default(false)
+  policeVerified      Boolean   @default(false)
+  medicalFitness      Boolean   @default(false)
+  videoVerified       Boolean   @default(false)
+  isSuspended         Boolean   @default(false)
+  suspensionReason    String?
+  isAvailable         Boolean?
+  rating               Float?
+  totalShifts         Int       @default(0)
+  totalEarnings       Float     @default(0)
+  onboardingCompleted Boolean   @default(false)
+  termsAcceptedAt     DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  skills          CarePartnerSkill[]
+  services        CarePartnerService[]
+  certifications  CarePartnerCertification[]
+  availability    CarePartnerAvailability[]
+  bookings        Booking[]
+}
+
+model CarePartnerSkill {
+  id          String   @id @default(cuid())
+  caregiverId String
+  skill       String
+  proficiency  String?
+  yearsOfExp  Int?
+  createdAt  DateTime @default(now())
+  caregiver Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  @@unique([caregiverId, skill])
+  @@index([caregiverId])
+}
+
+model CarePartnerService {
+  id          String   @id @default(cuid())
+  caregiverId String
+  service     String
+  hourlyRate  Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  caregiver Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  @@unique([caregiverId, service])
+  @@index([caregiverId])
+}
+
+model CarePartnerCertification {
+  id               String   @id @default(cuid())
+  caregiverId      String
+  name             String
+  issuer           String?
+  year             Int?
+  certificateFile  String?
+  isVerified       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  caregiver Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  @@index([caregiverId])
+}
+
+model CarePartnerAvailability {
+  id          String   @id @default(cuid())
+  caregiverId String
+  dayOfWeek   String
+  startTime   String
+  endTime     String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  caregiver Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  @@index([caregiverId])
+  @@index([caregiverId, dayOfWeek])
+}
+
+model Doctor {
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  phone             String
+  password          String
+  specialty         String
+  qualifications    String
+  experience        Int
+  languages         String    @default("[]")
+  area              String    @default("")
+  avatar            String?
+  bio               String?
+  feeOnline         Float     @default(0)
+  feeAtHome         Float     @default(0)
+  isOnline          Boolean   @default(false)
+  isPortalUser      Boolean   @default(false)
+  isBlocked         Boolean   @default(false)
+  blockReason       String?
+  commissionRate    Float     @default(15)
+  commissionDue     Float     @default(0)
+  totalConsultations Int      @default(0)
+  avgRating         Float     @default(0)
+  verified          Boolean   @default(false)
+  isSuspended       Boolean   @default(false)
+  suspensionReason  String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  bookings      Booking[]
+  prescriptions Prescription[]
+  schedules     DoctorSchedule[]
+  reviews       Review[]
+  commissions   Commission[]
+  transactions  Transaction[]
+}
+
+model DoctorSchedule {
+  id           String   @id @default(cuid())
+  doctorId     String
+  dayOfWeek    Int
+  startTime    String
+  endTime      String
+  slotDuration Int      @default(60)
+  maxPatients  Int      @default(10)
+  isAvailable  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  doctor Doctor @relation(fields: [doctorId], references: [id])
+}
+
+model Patient {
+  id          String    @id @default(cuid())
+  uhid        String    @unique
+  name        String
+  email       String?
+  phone       String
+  age         Int?
+  gender      String?
+  bloodGroup  String?
+  allergies   String?
+  address     String?
+  city        String    @default("Gurugram")
+  pincode     String?
+  landmark    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  bookings      Booking[]
+  prescriptions Prescription[]
+  documents     Document[]
+  reviews       Review[]
+}
+
+model Service {
+  id           String   @id @default(cuid())
+  name         String
+  category     String
+  subCategory  String?
+  description  String?
+  duration     String
+  priceType    String   @default("per_consultation")
+  priceOnline  Float?
+  priceAtHome  Float?
+  price        Float?
+  mode         String   @default("both")
+  includes     String   @default("[]")
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  bookings Booking[]
+}
+
+model Booking {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  patientId        String
+  doctorId         String?
+  caregiverId      String?
+  serviceId        String
+  bookingType      String
+  consultationMode String   @default("in_home")
+  status           String   @default("pending")
+  source           String   @default("portal")
+  date             String
+  startTime        String
+  endTime          String?
+  patientName      String
+  patientPhone     String
+  address          String?
+  city             String?
+  pincode          String?
+  notes            String?
+  totalAmount      Float    @default(0)
+  commissionAmount Float    @default(0)
+  doctorEarnings   Float    @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  patient       Patient      @relation(fields: [patientId], references: [id])
+  doctor        Doctor?      @relation(fields: [doctorId], references: [id])
+  caregiver     Caregiver?   @relation(fields: [caregiverId], references: [id])
+  service       Service      @relation(fields: [serviceId], references: [id])
+  prescription  Prescription?
+  review        Review?
+  commission    Commission?
+  notifications Notification[]
+}
+
+model Prescription {
+  id           String   @id @default(cuid())
+  bookingId    String   @unique
+  doctorId     String
+  patientId    String
+  patientUhid  String
+  medications  String   @default("[]")
+  notes        String?
+  diagnosis    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  booking Booking @relation(fields: [bookingId], references: [id])
+  doctor  Doctor  @relation(fields: [doctorId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  bookingId  String   @unique
+  doctorId   String
+  patientId  String
+  rating     Float
+  comment    String?
+  createdAt  DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id])
+  doctor  Doctor  @relation(fields: [doctorId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model Commission {
+  id               String    @id @default(cuid())
+  bookingId        String    @unique
+  doctorId         String
+  totalAmount      Float
+  commissionRate   Float
+  commissionAmount Float
+  doctorEarnings   Float
+  paymentStatus    String    @default("pending")
+  paidAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  booking Booking @relation(fields: [bookingId], references: [id])
+  doctor  Doctor  @relation(fields: [doctorId], references: [id])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  doctorId    String
+  amount      Float
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+  doctor Doctor @relation(fields: [doctorId], references: [id])
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  patientId  String
+  bookingId  String?
+  fileName   String
+  fileType   String
+  fileUrl    String
+  category   String   @default("prescription")
+  uploadedAt DateTime @default(now())
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  userType   String
+  title      String
+  message    String
+  type       String   @default("info")
+  isRead     Boolean  @default(false)
+  bookingId  String?
+  createdAt  DateTime @default(now())
+  booking Booking? @relation(fields: [bookingId], references: [id])
+}
+
+model Verification {
+  id               String    @id @default(cuid())
+  entityType       String
+  entityId         String
+  status           String    @default("pending")
+  package          String?
+  documents        String    @default("[]")
+  reviewNotes      String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  attemptCount     Int       @default(1)
+  isSuspended      Boolean   @default(false)
+  suspensionReason String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  @@index([entityType, entityId])
 }
