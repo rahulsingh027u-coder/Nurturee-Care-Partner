@@ -1,25 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePartnerAuth } from '@/lib/api-auth';
 
-const MAX_DOC_SIZE = 150 * 1024; // 150KB per document
+const MAX_DOC_SIZE = 150 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
-    const { partnerId, package: pkg, documents } = await req.json();
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
 
-    if (!partnerId || !pkg || !documents || !Array.isArray(documents)) {
+    const { package: pkg, documents } = await req.json();
+
+    if (!pkg || !documents || !Array.isArray(documents)) {
       return NextResponse.json(
-        { success: false, error: 'Partner ID, package type, and documents are required' },
+        { success: false, error: 'Package type and documents are required' },
         { status: 400 }
       );
     }
 
-    // Validate document sizes
+    // Use partner.id from JWT — ignore any partnerId in body
+    const partnerId = partner.id;
+
     for (const doc of documents) {
       const size = doc.size || 0;
       if (size > MAX_DOC_SIZE) {
         return NextResponse.json(
-          { success: false, error: `Document "${doc.name || 'Unknown'}" (${Math.round(size / 1024)}KB) exceeds the 150KB limit. Please compress or upload a smaller file.` },
+          { success: false, error: `Document "${doc.name || 'Unknown'}" (${Math.round(size / 1024)}KB) exceeds the 150KB limit.` },
           { status: 400 }
         );
       }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { createPartnerToken } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,7 +29,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account suspended', reason: partner.suspensionReason }, { status: 403 });
     }
 
-    return NextResponse.json({
+    // ─── CREATE JWT AND SET HTTPONLY COOKIE ───
+    const token = await createPartnerToken({
+      id: partner.id,
+      caregiverId: partner.caregiverId,
+      phone: partner.phone,
+      role: 'care_partner',
+    });
+
+    const response = NextResponse.json({
       success: true,
       partner: {
         id: partner.id,
@@ -47,6 +56,16 @@ export async function POST(req: NextRequest) {
         isSuspended: partner.isSuspended,
       },
     });
+
+    response.cookies.set('nurturee_partner_token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Verify OTP error:', error);
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 });

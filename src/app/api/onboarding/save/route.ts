@@ -1,56 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-
-/*
-  POST /api/onboarding/save
-  Saves ALL onboarding data to the database.
-  Accepts full onboarding payload and upserts into:
-    - Caregiver (basic profile fields)
-    - CarePartnerSkill (selected skills)
-    - CarePartnerService (selected services)
-    - CarePartnerCertification (certifications)
-    - CarePartnerAvailability (weekly availability slots)
-*/
+import { requirePartnerAuth } from '@/lib/api-auth';
 
 export async function POST(req: NextRequest) {
   try {
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
+
     const body = await req.json();
-    const { phone, name, email, specialty, experience, qualifications,
+    const { name, email, specialty, experience, qualifications,
             gender, dateOfBirth, bio, languages, city, state, address, pincode,
             skills, services, certifications, availability } = body;
 
-    if (!phone) {
-      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
-    }
-
-    // 1. Find the care partner by phone
-    const partner = await db.caregiver.findFirst({ where: { phone } });
-    if (!partner) {
+    // 1. Use partner.id from JWT token — IGNORE any phone in body
+    const dbPartner = await db.caregiver.findUnique({ where: { id: partner.id } });
+    if (!dbPartner) {
       return NextResponse.json({ error: 'Care partner not found' }, { status: 404 });
     }
 
-    // 2. Update basic profile fields on Caregiver table
+    // 2. Update basic profile fields
     await db.caregiver.update({
       where: { id: partner.id },
       data: {
-        name: name || partner.name,
-        email: email || partner.email,
-        specialty: specialty || partner.specialty,
-        experience: experience != null ? experience : partner.experience,
-        qualifications: qualifications || partner.qualifications,
-        gender: gender || partner.gender,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : partner.dateOfBirth,
-        bio: bio || partner.bio,
-        languages: languages || partner.languages,
-        city: city || partner.city,
-        state: state || partner.state,
-        address: address || partner.address,
-        pincode: pincode || partner.pincode,
+        name: name || dbPartner.name,
+        email: email || dbPartner.email,
+        specialty: specialty || dbPartner.specialty,
+        experience: experience != null ? experience : dbPartner.experience,
+        qualifications: qualifications || dbPartner.qualifications,
+        gender: gender || dbPartner.gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : dbPartner.dateOfBirth,
+        bio: bio || dbPartner.bio,
+        languages: languages || dbPartner.languages,
+        city: city || dbPartner.city,
+        state: state || dbPartner.state,
+        address: address || dbPartner.address,
+        pincode: pincode || dbPartner.pincode,
         onboardingCompleted: true,
       },
     });
 
-    // 3. Replace skills (delete existing, insert new)
+    // 3. Replace skills
     if (Array.isArray(skills)) {
       await db.carePartnerSkill.deleteMany({ where: { caregiverId: partner.id } });
       if (skills.length > 0) {
@@ -65,7 +56,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Replace services (delete existing, insert new)
+    // 4. Replace services
     if (Array.isArray(services)) {
       await db.carePartnerService.deleteMany({ where: { caregiverId: partner.id } });
       if (services.length > 0) {
@@ -80,7 +71,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Replace certifications (delete existing, insert new)
+    // 5. Replace certifications
     if (Array.isArray(certifications)) {
       await db.carePartnerCertification.deleteMany({ where: { caregiverId: partner.id } });
       if (certifications.length > 0) {
@@ -97,7 +88,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. Replace availability (delete existing, insert new)
+    // 6. Replace availability
     if (Array.isArray(availability)) {
       await db.carePartnerAvailability.deleteMany({ where: { caregiverId: partner.id } });
       if (availability.length > 0) {
@@ -113,10 +104,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 7. Return updated partner
-    const updated = await db.caregiver.findFirst({ where: { id: partner.id } });
-
-    console.log(`Onboarding data saved for ${phone} (${partner.caregiverId})`);
+    const updated = await db.caregiver.findUnique({ where: { id: partner.id } });
     return NextResponse.json({
       success: true,
       message: 'Onboarding data saved successfully',

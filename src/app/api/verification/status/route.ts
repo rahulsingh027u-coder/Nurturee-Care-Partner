@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePartnerAuth } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
   try {
-    const partnerId = req.nextUrl.searchParams.get('partnerId');
-    if (!partnerId) {
-      return NextResponse.json({ success: false, error: 'Partner ID required' }, { status: 400 });
-    }
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
 
+    // Use partner.id from JWT — ignore any partnerId in query params
     const verifications = await db.verification.findMany({
-      where: { entityType: 'caregiver', entityId: partnerId },
+      where: { entityType: 'caregiver', entityId: partner.id },
       orderBy: { createdAt: 'desc' },
     });
 
-    const partner = await db.caregiver.findUnique({
-      where: { id: partnerId },
+    const dbPartner = await db.caregiver.findUnique({
+      where: { id: partner.id },
       select: { isVerified: true, aadhaarVerified: true, policeVerified: true, medicalFitness: true, videoVerified: true },
     });
 
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
         submittedAt: v.createdAt,
         reviewedAt: v.reviewedAt,
       })),
-      partner,
+      partner: dbPartner,
     });
   } catch (error) {
     console.error('Verification status error:', error);

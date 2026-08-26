@@ -1,36 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePartnerAuth } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
   try {
-    const phone = req.nextUrl.searchParams.get('phone');
-    if (!phone) {
-      return NextResponse.json({ error: 'Phone required' }, { status: 400 });
-    }
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
 
-    const partner = await db.caregiver.findFirst({ where: { phone } });
-
-    if (!partner) {
+    const dbPartner = await db.caregiver.findUnique({ where: { id: partner.id } });
+    if (!dbPartner) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     return NextResponse.json({
-      id: partner.id,
-      caregiverId: partner.caregiverId,
-      name: partner.name,
-      phone: partner.phone,
-      email: partner.email,
-      specialty: partner.specialty,
-      experience: partner.experience,
-      qualifications: partner.qualifications,
-      isVerified: partner.isVerified,
-      isAvailable: partner.isAvailable,
-      aadhaarVerified: partner.aadhaarVerified,
-      policeVerified: partner.policeVerified,
-      medicalFitness: partner.medicalFitness,
-      videoVerified: partner.videoVerified,
-      isSuspended: partner.isSuspended,
-      rating: partner.rating,
+      id: dbPartner.id,
+      caregiverId: dbPartner.caregiverId,
+      name: dbPartner.name,
+      phone: dbPartner.phone,
+      email: dbPartner.email,
+      specialty: dbPartner.specialty,
+      experience: dbPartner.experience,
+      qualifications: dbPartner.qualifications,
+      isVerified: dbPartner.isVerified,
+      isAvailable: dbPartner.isAvailable,
+      aadhaarVerified: dbPartner.aadhaarVerified,
+      policeVerified: dbPartner.policeVerified,
+      medicalFitness: dbPartner.medicalFitness,
+      videoVerified: dbPartner.videoVerified,
+      isSuspended: dbPartner.isSuspended,
+      rating: dbPartner.rating,
     });
   } catch (error) {
     console.error('Profile GET error:', error);
@@ -40,19 +40,15 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { phone, name, email, qualifications, experience, specialty } = await req.json();
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
 
-    if (!phone) {
-      return NextResponse.json({ error: 'Phone required' }, { status: 400 });
-    }
+    const { name, email, qualifications, experience, specialty } = await req.json();
 
-    const existing = await db.caregiver.findFirst({ where: { phone } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
-    }
-
-    const partner = await db.caregiver.update({
-      where: { id: existing.id },
+    const updated = await db.caregiver.update({
+      where: { id: partner.id },
       data: {
         ...(name && { name }),
         ...(email && { email }),
@@ -62,7 +58,7 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, partner });
+    return NextResponse.json({ success: true, partner: updated });
   } catch (error) {
     console.error('Profile PATCH error:', error);
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });

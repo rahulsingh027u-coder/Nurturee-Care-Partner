@@ -1,26 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-
-/*
-  GET /api/onboarding/load?phone=XXXXXXXXXX
-  Returns ALL onboarding data for a care partner:
-    - Basic profile from Caregiver table
-    - Skills from CarePartnerSkill
-    - Services from CarePartnerService
-    - Certifications from CarePartnerCertification
-    - Availability from CarePartnerAvailability
-*/
+import { requirePartnerAuth } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
   try {
-    const phone = req.nextUrl.searchParams.get('phone');
-    if (!phone) {
-      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
-    }
+    // ─── AUTH GATE ───
+    const auth = await requirePartnerAuth(req);
+    if (!auth.authorized) return auth.response;
+    const { partner } = auth;
 
-    // 1. Find the care partner
-    const partner = await db.caregiver.findFirst({
-      where: { phone },
+    const dbPartner = await db.caregiver.findUnique({
+      where: { id: partner.id },
       include: {
         skills: true,
         services: true,
@@ -29,47 +19,37 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    if (!partner) {
+    if (!dbPartner) {
       return NextResponse.json({ error: 'Care partner not found' }, { status: 404 });
     }
 
-    // 2. Build the full onboarding response
     const responseData = {
-      // Basic profile
-      name: partner.name,
-      email: partner.email,
-      phone: partner.phone,
-      specialty: partner.specialty,
-      experience: partner.experience,
-      qualifications: partner.qualifications,
-      gender: partner.gender,
-      dateOfBirth: partner.dateOfBirth,
-      bio: partner.bio,
-      languages: partner.languages,
-      city: partner.city,
-      state: partner.state,
-      address: partner.address,
-      pincode: partner.pincode,
-      onboardingCompleted: partner.onboardingCompleted,
-      isVerified: partner.isVerified,
-
-      // Skills — return as string array for compatibility
-      skills: partner.skills.map(s => s.skill),
-
-      // Services — return as string array
-      services: partner.services.map(s => s.service),
-
-      // Certifications — return full objects
-      certifications: partner.certifications.map(c => ({
+      name: dbPartner.name,
+      email: dbPartner.email,
+      phone: dbPartner.phone,
+      specialty: dbPartner.specialty,
+      experience: dbPartner.experience,
+      qualifications: dbPartner.qualifications,
+      gender: dbPartner.gender,
+      dateOfBirth: dbPartner.dateOfBirth,
+      bio: dbPartner.bio,
+      languages: dbPartner.languages,
+      city: dbPartner.city,
+      state: dbPartner.state,
+      address: dbPartner.address,
+      pincode: dbPartner.pincode,
+      onboardingCompleted: dbPartner.onboardingCompleted,
+      isVerified: dbPartner.isVerified,
+      skills: dbPartner.skills.map(s => s.skill),
+      services: dbPartner.services.map(s => s.service),
+      certifications: dbPartner.certifications.map(c => ({
         name: c.name,
         issuer: c.issuer,
         year: c.year,
         certificateFile: c.certificateFile,
         isVerified: c.isVerified,
       })),
-
-      // Availability — return full objects
-      availability: partner.availability.map(a => ({
+      availability: dbPartner.availability.map(a => ({
         dayOfWeek: a.dayOfWeek,
         startTime: a.startTime,
         endTime: a.endTime,
