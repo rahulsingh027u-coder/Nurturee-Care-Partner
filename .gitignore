@@ -43,3 +43,4 @@ start.sh
 .idea/
 =
 prisma/schema.prisma.bak
+db/*.db
