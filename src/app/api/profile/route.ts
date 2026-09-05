@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     if (!auth.authorized) return auth.response;
     const { partner } = auth;
 
-    const dbPartner = await db.caregiver.findUnique({ where: { id: partner.id } });
+    const dbPartner = await db.caregiver.findUnique({ where: { id: partner!.id } });
     if (!dbPartner) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest) {
     const { name, email, qualifications, experience, specialty } = await req.json();
 
     const updated = await db.caregiver.update({
-      where: { id: partner.id },
+      where: { id: partner!.id },
       data: {
         ...(name && { name }),
         ...(email && { email }),

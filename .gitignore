@@ -44,3 +44,8 @@ start.sh
 =
 prisma/schema.prisma.bak
 db/*.db
+
+# Log files
+*.log
+server.log
+dev.log

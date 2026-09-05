@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { saveOtp, isOtpRateLimited } from '@/lib/redis';
 
 const DEMO_PHONE = '9717137285';
 const DEMO_OTP = '123456';
@@ -12,7 +13,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid 10-digit phone required' }, { status: 400 });
     }
 
-    // Demo flow: auto-create caregiver if not exists, use OTP 123456
+    if (await isOtpRateLimited(phone)) {
+      return NextResponse.json({ error: 'Please wait 30 seconds before requesting another OTP' }, { status: 429 });
+    }
+
     if (phone === DEMO_PHONE) {
       const existing = await db.caregiver.findFirst({ where: { phone } });
       if (!existing) {
@@ -25,40 +29,26 @@ export async function POST(req: NextRequest) {
             specialty: 'elder_care',
             experience: 3,
             qualifications: 'B.Sc Nursing, GNM Diploma',
-            isVerified: false,
-            aadhaarVerified: false,
-            policeVerified: false,
-            medicalFitness: false,
-            videoVerified: false,
-            isSuspended: false,
           },
         });
-        console.log(`Demo caregiver created for ${phone}`);
       }
-
-      const otpStore = (globalThis as any).__otpStore = (globalThis as any).__otpStore || {};
-      otpStore[phone] = { otp: DEMO_OTP, expiresAt: Date.now() + 30 * 60 * 1000 };
-      console.log(`Demo OTP for ${phone}: ${DEMO_OTP}`);
-
+      await saveOtp(phone, DEMO_OTP, true);
+      if (process.env.NODE_ENV !== "production") console.log(`[otp] demo ${phone}: ${DEMO_OTP}`);
       return NextResponse.json({ success: true, message: 'OTP sent' });
     }
 
-    // Normal flow
     const partner = await db.caregiver.findFirst({ where: { phone } });
-
     if (!partner) {
       return NextResponse.json({ error: 'No account found with this phone number' }, { status: 404 });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log(`OTP for ${phone}: ${otp}`);
-
-    const otpStore = (globalThis as any).__otpStore = (globalThis as any).__otpStore || {};
-    otpStore[phone] = { otp, expiresAt: Date.now() + 5 * 60 * 1000 };
+    await saveOtp(phone, otp);
+    if (process.env.NODE_ENV !== "production") console.log(`[otp] ${phone}: ${otp}`);
 
     return NextResponse.json({ success: true, message: 'OTP sent' });
   } catch (error) {
-    console.error('Send OTP error:', error);
+    console.error('[auth] send-otp error:', error);
     return NextResponse.json({ error: 'Failed to send OTP' }, { status: 500 });
   }
 }

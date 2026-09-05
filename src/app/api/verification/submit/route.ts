@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use partner.id from JWT — ignore any partnerId in body
-    const partnerId = partner.id;
+    // Use partner!.id from JWT — ignore any partnerId in body
+    const partnerId = partner!.id;
 
     for (const doc of documents) {
       const size = doc.size || 0;

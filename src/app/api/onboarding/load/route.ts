@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const { partner } = auth;
 
     const dbPartner = await db.caregiver.findUnique({
-      where: { id: partner.id },
+      where: { id: partner!.id },
       include: {
         skills: true,
         services: true,

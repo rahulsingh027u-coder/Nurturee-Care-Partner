@@ -28,6 +28,7 @@ interface CarePartnerProfile {
     today: number;
     thisWeek: number;
     thisMonth: number;
+    lastWeek: number;
     total: number;
     pending: number;
     paid: number;

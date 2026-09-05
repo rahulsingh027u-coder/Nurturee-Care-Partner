@@ -37,7 +37,7 @@ import {
   mockMonthlyEarnings,
   mockCareTasks,
 } from '@/lib/care-partner-data';
-import ShiftCompleteOTP from './ShiftCompleteOTP';
+import ShiftCompleteOTPRaw from './ShiftCompleteOTP';
 import ShiftProgressBar from './ShiftProgressBar';
 import ReportIssueDialog from './ReportIssueDialog';
 import SOSEmergencyDialog from './SOSEmergencyDialog';
@@ -50,6 +50,7 @@ import {
 import type { Shift } from '@/lib/care-partner-data';
 import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/helpers';
+const ShiftCompleteOTP = ShiftCompleteOTPRaw as any;
 
 interface DashboardViewProps {
   carePartnerName: string;

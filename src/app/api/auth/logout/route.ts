@@ -4,7 +4,7 @@ export async function POST() {
   const response = NextResponse.json({ success: true, message: 'Logged out' });
   response.cookies.set('nurturee_partner_token', '', {
     httpOnly: true,
-    secure: true,
+    secure: false,
     sameSite: 'lax',
     maxAge: 0,
     path: '/',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createPartnerToken } from '@/lib/auth';
+import { getOtp, deleteOtp } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,17 +11,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Phone and OTP required' }, { status: 400 });
     }
 
-    const otpStore = (globalThis as any).__otpStore || {};
-    const stored = otpStore[phone];
-
-    if (!stored || stored.otp !== otp || Date.now() > stored.expiresAt) {
+    const stored = await getOtp(phone);
+    if (!stored || stored !== otp) {
       return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 });
     }
 
-    delete otpStore[phone];
+    await deleteOtp(phone);
 
     const partner = await db.caregiver.findFirst({ where: { phone } });
-
     if (!partner) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
@@ -29,7 +27,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account suspended', reason: partner.suspensionReason }, { status: 403 });
     }
 
-    // ─── CREATE JWT AND SET HTTPONLY COOKIE ───
     const token = await createPartnerToken({
       id: partner.id,
       caregiverId: partner.caregiverId,
@@ -67,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Verify OTP error:', error);
+    console.error('[auth] verify-otp error:', error);
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 });
   }
 }

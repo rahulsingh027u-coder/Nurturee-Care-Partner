@@ -9,14 +9,14 @@ export async function GET(req: NextRequest) {
     if (!auth.authorized) return auth.response;
     const { partner } = auth;
 
-    // Use partner.id from JWT — ignore any partnerId in query params
+    // Use partner!.id from JWT — ignore any partnerId in query params
     const verifications = await db.verification.findMany({
-      where: { entityType: 'caregiver', entityId: partner.id },
+      where: { entityType: 'caregiver', entityId: partner!.id },
       orderBy: { createdAt: 'desc' },
     });
 
     const dbPartner = await db.caregiver.findUnique({
-      where: { id: partner.id },
+      where: { id: partner!.id },
       select: { isVerified: true, aadhaarVerified: true, policeVerified: true, medicalFitness: true, videoVerified: true },
     });
 

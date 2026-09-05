@@ -60,7 +60,7 @@ export default function CarePartnerPortal() {
         if (parsed.isVerified && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') {
           setAuthState('authenticated')
         } else if (parsed.isVerified) {
-          setAuthState('terms_acceptance')
+          if (localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') { setAuthState('authenticated') } else { setAuthState('terms_acceptance') }
         } else if (isOnboarded()) {
           setAuthState('pending_verification')
         } else {
@@ -72,6 +72,22 @@ export default function CarePartnerPortal() {
     }
   }, [])
 
+  // Validate server-side session on mount - clear stale localStorage if cookie is missing
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!localStorage.getItem('care_partner_data')) return
+    fetch('/api/auth/check')
+      .then((r) => {
+        if (r.ok) return
+        localStorage.removeItem('care_partner_data')
+        localStorage.removeItem(TERMS_ACCEPTED_KEY)
+        localStorage.removeItem(AADHAAR_PASSED_KEY)
+        setPartnerData(null)
+        setAuthState('login')
+      })
+      .catch(() => {})
+  }, [])
+
   const handleLogin = (phone: string, data: PartnerData) => {
     setPartnerData(data)
     localStorage.setItem('care_partner_data', JSON.stringify(data))
@@ -79,7 +95,7 @@ export default function CarePartnerPortal() {
     if (data.isVerified && localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') {
       setAuthState('authenticated')
     } else if (data.isVerified) {
-      setAuthState('terms_acceptance')
+      if (localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') { setAuthState('authenticated') } else { setAuthState('terms_acceptance') }
     } else if (isOnboarded()) {
       setAuthState('pending_verification')
     } else {
@@ -143,7 +159,7 @@ export default function CarePartnerPortal() {
       setPartnerData(updated)
       localStorage.setItem('care_partner_data', JSON.stringify(updated))
     }
-    setAuthState('terms_acceptance')
+    if (localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true') { setAuthState('authenticated') } else { setAuthState('terms_acceptance') }
   }
 
   const handleTermsAccepted = () => {
@@ -194,7 +210,7 @@ export default function CarePartnerPortal() {
   if (authState === 'pending_verification') {
     return (
       <VerificationPage
-        partnerId={partnerData?.id}
+        partnerId={partnerData?.id ?? ""}
         onComplete={handleVerificationComplete}
       />
     )
@@ -216,7 +232,7 @@ export default function CarePartnerPortal() {
             carePartnerName={displayName}
             specialty={displaySpecialty}
             onNavigate={handleNavigate}
-            partnerId={partnerData?.id}
+            partnerId={partnerData?.id ?? ""}
           />
         )
       case 'schedule':
@@ -235,14 +251,14 @@ export default function CarePartnerPortal() {
       case 'earnings':
         return <EarningsView />
       case 'profile':
-        return <ProfileView onNavigate={handleNavigate} partnerId={partnerData?.id} />
+        return <ProfileView onNavigate={handleNavigate} partnerId={partnerData?.id ?? ""} />
       case 'notifications':
         return <NotificationsView />
       case 'verification':
         return (
           <VerificationPage
             optionalMode
-            partnerId={partnerData?.id}
+            partnerId={partnerData?.id ?? ""}
             onComplete={() => setActiveView('profile')}
           />
         )
@@ -252,7 +268,7 @@ export default function CarePartnerPortal() {
             carePartnerName={displayName}
             specialty={displaySpecialty}
             onNavigate={handleNavigate}
-            partnerId={partnerData?.id}
+            partnerId={partnerData?.id ?? ""}
           />
         )
     }

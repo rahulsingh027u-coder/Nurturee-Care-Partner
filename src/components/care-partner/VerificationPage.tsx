@@ -40,6 +40,7 @@ type VerificationType = 'aadhaar' | 'police' | 'medical' | 'video';
 type VerificationStatus = 'not_started' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'max_attempts_reached';
 
 interface FileEntry {
+  url?: string;
   id: string;
   name: string;
   size: number;
@@ -343,11 +344,11 @@ export default function VerificationPage({ partnerId, onComplete, optionalMode =
           const delay = doc.type === 'aadhaar' ? 1000 : 2000;
           setTimeout(() => {
             setApprovingType(null);
-            if (doc.type === 'aadhaar' && onCompleteRef.current) onCompleteRef.current();
+            if (doc.type === 'aadhaar' && onCompleteRef.current) onCompleteRef.current?.();
             else setActiveType(null);
           }, delay);
         } else if (doc.type === 'aadhaar' && onCompleteRef.current) {
-          setTimeout(() => onCompleteRef.current(), 500);
+          setTimeout(() => onCompleteRef.current?.(), 500);
         }
       }
     });

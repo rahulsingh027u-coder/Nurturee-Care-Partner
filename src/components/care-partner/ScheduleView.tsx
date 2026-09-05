@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { Calendar } from '@/components/ui/calendar';
+import { Calendar as CalendarRaw } from '@/components/ui/calendar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import type { Shift } from '@/lib/care-partner-data';
 import ShiftProgressBar from './ShiftProgressBar';
 import { format, addMonths, subMonths } from 'date-fns';
 import { formatTime, formatCurrency } from '@/lib/helpers';
+const Calendar = CalendarRaw as any;
 
 interface ScheduleViewProps {
   onNavigate: (view: string) => void;
