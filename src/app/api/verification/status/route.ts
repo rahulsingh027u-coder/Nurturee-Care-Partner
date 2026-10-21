@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePartnerAuth } from '@/lib/api-auth';
+import { requireAuthenticatedPartner } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
   try {
     // ─── AUTH GATE ───
-    const auth = await requirePartnerAuth(req);
+    const auth = await requireAuthenticatedPartner(req);
     if (!auth.authorized) return auth.response;
     const { partner } = auth;
 

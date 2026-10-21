@@ -62,3 +62,52 @@ export async function requirePartnerAuth(req: NextRequest) {
 
   return { authorized: true, partner };
 }
+
+
+// Lighter auth check — only verifies JWT, does NOT check isVerified.
+// Use for routes that unverified caregivers need: onboarding, verification, profile.
+export async function requireAuthenticatedPartner(req: NextRequest) {
+  const partner = await getAuthenticatedPartner();
+
+  if (!partner) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Authentication required. Please login again.' },
+        { status: 401 }
+      ),
+    };
+  }
+
+  // Check suspension (but NOT verification status)
+  try {
+    const dbPartner = await db.caregiver.findUnique({
+      where: { id: partner.id },
+      select: { isSuspended: true, suspensionReason: true },
+    });
+
+    if (!dbPartner) {
+      return {
+        authorized: false,
+        response: NextResponse.json(
+          { error: 'Account not found. Please contact support.' },
+          { status: 404 }
+        ),
+      };
+    }
+
+    if (dbPartner.isSuspended) {
+      return {
+        authorized: false,
+        response: NextResponse.json(
+          { error: 'Account suspended', reason: dbPartner.suspensionReason || 'Contact support' },
+          { status: 403 }
+        ),
+      };
+    }
+  } catch (error) {
+    console.error('[api-auth] suspension check failed:', error);
+  }
+
+  return { authorized: true, partner };
+}

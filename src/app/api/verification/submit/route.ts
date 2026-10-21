@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePartnerAuth } from '@/lib/api-auth';
+import { requireAuthenticatedPartner } from '@/lib/api-auth';
 
 const MAX_DOC_SIZE = 150 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
     // ─── AUTH GATE ───
-    const auth = await requirePartnerAuth(req);
+    const auth = await requireAuthenticatedPartner(req);
     if (!auth.authorized) return auth.response;
     const { partner } = auth;
 
