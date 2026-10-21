@@ -49,3 +49,7 @@ db/*.db
 *.log
 server.log
 dev.log
+
+# Backup files
+*.bak
+_backups/
