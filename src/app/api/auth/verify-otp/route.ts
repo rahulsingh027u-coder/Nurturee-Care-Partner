@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createPartnerToken } from '@/lib/auth';
-import { getOtp, deleteOtp } from '@/lib/redis';
+import { getOtp, deleteOtp, saveOtp } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,12 +11,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Phone and OTP required' }, { status: 400 });
     }
 
+    // Brute-force protection: check attempt count
+    const attemptsKey = `otp:attempts:${phone}`;
+    const attemptsStr = await getOtp(attemptsKey);
+    const attempts = attemptsStr ? parseInt(attemptsStr) : 0;
+    if (attempts >= 5) {
+      return NextResponse.json({ error: "Too many attempts. Please request a new OTP." }, { status: 429 });
+    }
+
     const stored = await getOtp(phone);
     if (!stored || stored !== otp) {
+      // Increment attempt count
+      await saveOtp(attemptsKey, String(attempts + 1));
       return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 });
     }
 
     await deleteOtp(phone);
+    await deleteOtp(attemptsKey);
 
     const partner = await db.caregiver.findFirst({ where: { phone } });
     if (!partner) {

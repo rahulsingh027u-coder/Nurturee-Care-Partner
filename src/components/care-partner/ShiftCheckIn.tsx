@@ -110,7 +110,7 @@ interface ShiftCheckInProps {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
-const DEMO_OTP = '1234';
+// Hardcoded shift OTP removed — now uses /api/shift-otp backend
 const RESEND_COOLDOWN = 30;
 
 // ── Component ────────────────────────────────────────────────────────
@@ -412,7 +412,7 @@ export default function ShiftCheckIn({
     [otp],
   );
 
-  const handleVerify = useCallback(() => {
+  const handleVerify = useCallback(async () => {
     const enteredOtp = otp.join('');
     if (enteredOtp.length !== 4) {
       setError('Please enter all 4 digits');
@@ -422,9 +422,15 @@ export default function ShiftCheckIn({
     setStep('otp_verifying');
     setError('');
 
-    // Simulate verification (demo: accept 1234)
-    setTimeout(() => {
-      if (enteredOtp === DEMO_OTP) {
+    // Verify OTP via backend API
+    try {
+      const verifyResp = await fetch('/api/shift-otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId: shift.id, type: 'start', otp: enteredOtp }),
+      });
+      const verifyData = await verifyResp.json();
+      if (verifyData.success) {
         setStep('success');
         // Call onStart after a brief delay for the success animation
         setTimeout(() => {
@@ -436,7 +442,10 @@ export default function ShiftCheckIn({
         setOtp(['', '', '', '']);
         inputRefs.current[0]?.focus();
       }
-    }, 1800);
+    } catch {
+      setStep('otp_enter');
+      setError('Failed to verify OTP. Please try again.');
+    }
   }, [otp, shift.id, onStart]);
 
   const handleResend = useCallback(() => {
