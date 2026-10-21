@@ -168,7 +168,14 @@ export default function CarePartnerPortal() {
     setActiveView('dashboard')
   }
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {}
+    localStorage.removeItem('care_partner_data')
+    localStorage.removeItem(TERMS_ACCEPTED_KEY)
+    localStorage.removeItem(AADHAAR_PASSED_KEY)
+    setPartnerData(null)
     setAuthState('login')
     setActiveView('dashboard')
   }
