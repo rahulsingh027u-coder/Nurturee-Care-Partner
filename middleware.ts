@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'nurturee-partner-secret-CHANGE-IN-PRODUCTION'
+  process.env.JWT_SECRET || (() => { throw new Error("JWT_SECRET env var is required"); })()
 );
 
 export async function middleware(request: NextRequest) {

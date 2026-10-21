@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   // Development-only: you can keep the original logic here if needed for local dev
   // But for production safety, even in dev we should require a dev secret
   const devSecret = req.headers.get('x-dev-secret');
-  if (devSecret !== 'nurturee-dev-2024') {
+  if (devSecret !== process.env.DEV_SETUP_SECRET) {
     return NextResponse.json(
       { success: false, error: 'Invalid dev secret' },
       { status: 403 }

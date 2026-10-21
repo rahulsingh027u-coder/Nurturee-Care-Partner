@@ -1,7 +1,7 @@
 import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
-const secretString = process.env.JWT_SECRET || '';
+const secretString = process.env.JWT_SECRET || (() => { throw new Error("JWT_SECRET env var is required"); })();
 const JWT_SECRET = new TextEncoder().encode(secretString);
 
 export interface CarePartnerPayload {
