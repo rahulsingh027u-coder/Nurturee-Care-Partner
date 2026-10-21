@@ -1,6 +1,12 @@
 'use client';
-
-import { useState, useMemo, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   AreaChart,
   Area,
@@ -29,25 +35,15 @@ import {
   ArrowRight,
   X,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import {
-  mockCarePartner,
-  mockShifts,
-  mockMonthlyEarnings,
-  mockCareTasks,
-} from '@/lib/care-partner-data';
+
+
+import { useState, useMemo, useEffect } from 'react';
+import { mockCareTasks } from '@/lib/care-partner-data';
+import type { Shift } from '@/lib/care-partner-data';
 import ShiftCompleteOTPRaw from './ShiftCompleteOTP';
 import ShiftProgressBar from './ShiftProgressBar';
 import ReportIssueDialog from './ReportIssueDialog';
 import SOSEmergencyDialog from './SOSEmergencyDialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import type { Shift } from '@/lib/care-partner-data';
 import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/helpers';
 const ShiftCompleteOTP = ShiftCompleteOTPRaw as any;
@@ -124,7 +120,29 @@ function getModeBadge(mode: string) {
 }
 
 export default function DashboardView({ carePartnerName, specialty, onNavigate, partnerId }: DashboardViewProps) {
-  const [completeShift, setCompleteShift] = useState<typeof mockShifts[number] | null>(null);
+  const [shifts, setShifts] = useState<Shift[]>([])
+  const [earningsData, setEarningsData] = useState<any>(null)
+
+  useEffect(() => {
+    fetch('/api/bookings').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {})
+    fetch('/api/earnings').then(r => r.json()).then(d => setEarningsData(d)).catch(() => {})
+  }, [])
+
+  // Map API response to shapes the component expects
+  const mockCarePartner = earningsData ? {
+    earnings: {
+      today: earningsData.summary?.today || 0,
+      thisWeek: earningsData.summary?.thisWeek || 0,
+      thisMonth: earningsData.summary?.thisMonth || 0,
+      lastWeek: 0,
+      total: earningsData.summary?.total || 0,
+      pending: 0,
+      paid: 0,
+    }
+  } : { earnings: { today: 0, thisWeek: 0, thisMonth: 0, lastWeek: 0, total: 0, pending: 0, paid: 0 } }
+  const mockMonthlyEarnings = earningsData?.monthlyBreakdown || []
+
+  const [completeShift, setCompleteShift] = useState<Shift | null>(null);
   const [shiftCompleted, setShiftCompleted] = useState(false);
   const [detailShift, setDetailShift] = useState<Shift | null>(null);
   const [dismissVerificationBanner, setDismissVerificationBanner] = useState(false);
@@ -155,7 +173,7 @@ export default function DashboardView({ carePartnerName, specialty, onNavigate, 
 
   const todayShifts = useMemo(
     () =>
-      mockShifts
+      shifts
         .filter((s) => s.date === todayStr)
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
     [todayStr]
@@ -163,7 +181,7 @@ export default function DashboardView({ carePartnerName, specialty, onNavigate, 
 
   const upcomingShifts = useMemo(
     () =>
-      mockShifts
+      shifts
         .filter((s) => s.status === 'confirmed' || s.status === 'in_progress')
         .sort((a, b) => {
           const dateComp = a.date.localeCompare(b.date);

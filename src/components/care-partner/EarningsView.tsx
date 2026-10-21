@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardHeader,
@@ -114,6 +114,32 @@ const CustomTooltip = ({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function EarningsView() {
+  const [earningsData, setEarningsData] = useState<any>(null)
+
+  useEffect(() => {
+    fetch('/api/earnings')
+      .then((r) => r.json())
+      .then((d) => setEarningsData(d))
+      .catch(() => {})
+  }, [])
+
+  // Map API response to shapes the component expects
+  const mockCarePartner = earningsData ? {
+    earnings: {
+      today: earningsData.summary?.today || 0,
+      thisWeek: earningsData.summary?.thisWeek || 0,
+      thisMonth: earningsData.summary?.thisMonth || 0,
+      lastWeek: 0,
+      total: earningsData.summary?.total || 0,
+      pending: 0,
+      paid: 0,
+    }
+  } : { earnings: { today: 0, thisWeek: 0, thisMonth: 0, lastWeek: 0, total: 0, pending: 0, paid: 0 } }
+
+  const mockEarnings = earningsData?.transactions || []
+  const mockMonthlyEarnings = earningsData?.monthlyBreakdown || []
+  const mockWeeklyEarnings = earningsData?.weeklyBreakdown || []
+
   const [activeCard, setActiveCard] = useState<Period>('thisMonth');
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('monthly');
   const [selectedTransaction, setSelectedTransaction] = useState<string | null>(null);

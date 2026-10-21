@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 
 import { NURTUREE_HELPLINE } from '@/lib/constants';
-import { mockShifts } from '@/lib/care-partner-data';
 import type { Shift } from '@/lib/care-partner-data';
 import ShiftCheckIn from './ShiftCheckIn';
 import ShiftCompleteOTP from './ShiftCompleteOTP';
@@ -83,6 +82,11 @@ function getDateGroupSortKey(dateStr: string): number {
 }
 
 export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
+  const [shifts, setShifts] = useState<Shift[]>([])
+  useEffect(() => {
+    fetch('/api/bookings').then(r => r.json()).then(d => setShifts(d.shifts || [])).catch(() => {})
+  }, [])
+
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [startCalOpen, setStartCalOpen] = useState(false);
@@ -100,7 +104,7 @@ export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
 
   // Shifts in the active date range (used for stats counts)
   const dateRangeShifts = useMemo(() => {
-    return mockShifts.filter((shift) => {
+    return shifts.filter((shift) => {
       const shiftDate = parseISO(shift.date);
       if (startDate || endDate) {
         // User picked a custom range
@@ -128,7 +132,7 @@ export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
   }, [dateRangeShifts]);
 
   const filteredShifts = useMemo(() => {
-    return mockShifts.filter((shift) => {
+    return shifts.filter((shift) => {
       const shiftDate = parseISO(shift.date);
 
       // Date range filter
@@ -148,7 +152,7 @@ export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
 
   // Group shifts by date
   const groupedShifts = useMemo(() => {
-    const groups: Record<string, typeof mockShifts> = {};
+    const groups: Record<string, typeof shifts> = {};
 
     for (const shift of filteredShifts) {
       const label = getDateGroupLabel(shift.date);

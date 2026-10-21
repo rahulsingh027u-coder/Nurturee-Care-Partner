@@ -233,7 +233,7 @@ model Booking {
   status           String   @default("pending")
   source           String   @default("portal")
   date             String
-  startTime        String
+  startTime        String?
   endTime          String?
   patientName      String
   patientPhone     String
