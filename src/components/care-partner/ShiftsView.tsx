@@ -119,7 +119,7 @@ export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
       }
       return true;
     });
-  }, [startDate, endDate]);
+  }, [startDate, endDate, shifts]);
 
   const stats = useMemo(() => {
     const total = dateRangeShifts.length;
@@ -148,7 +148,7 @@ export default function ShiftsView({ onNavigate }: ShiftsViewProps) {
 
       return true;
     });
-  }, [startDate, endDate, statusFilter]);
+  }, [startDate, endDate, statusFilter, shifts]);
 
   // Group shifts by date
   const groupedShifts = useMemo(() => {

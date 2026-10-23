@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const transactions: any[] = [];
 
     for (const b of bookings) {
-      const amount = Number(b.doctorEarnings || b.totalAmount || 0);
+      const amount = Number(b.doctorEarnings ?? b.totalAmount ?? 0);
       total += amount;
       const bDateStr = b.date || '';
       const bookingDate = bDateStr ? new Date(bDateStr) : null;
@@ -58,8 +58,25 @@ export async function GET(req: NextRequest) {
     const monthlyBreakdown = Object.entries(monthlyMap).map(([month, earnings]) => ({ month, earnings })).sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
     const weeklyBreakdown = Object.entries(weeklyMap).map(([week, earnings]) => ({ week, earnings })).sort((a, b) => a.week.localeCompare(b.week)).slice(-8);
 
+    // Calculate lastWeek, pending, paid
+    const lastWeekStart = new Date(startOfWeek);
+    lastWeekStart.setDate(startOfWeek.getDate() - 7);
+    let lastWeek = 0;
+    let paid = 0;
+    let pending = 0;
+    for (const b of bookings) {
+      const amount = Number(b.doctorEarnings ?? b.totalAmount ?? 0);
+      const bDateStr = b.date || '';
+      const bookingDate = bDateStr ? new Date(bDateStr) : null;
+      if (bookingDate && bookingDate >= lastWeekStart && bookingDate < startOfWeek) {
+        lastWeek += amount;
+      }
+      if (b.status === 'completed') paid += amount;
+      else if (b.status !== 'cancelled') pending += amount;
+    }
+
     return NextResponse.json({
-      summary: { today, thisWeek, thisMonth, total },
+      summary: { today, thisWeek, thisMonth, total, lastWeek, pending, paid },
       monthlyBreakdown, weeklyBreakdown, transactions,
       totalBookings: bookings.length,
     });

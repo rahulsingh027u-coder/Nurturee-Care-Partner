@@ -203,7 +203,7 @@ export default function DashboardView({ carePartnerName, specialty, onNavigate, 
     []
   );
 
-  const chartData = useMemo(() => mockMonthlyEarnings.slice(-6), []);
+  const chartData = useMemo(() => (earningsData?.monthlyBreakdown || []).slice(-6), [earningsData]);
 
   return (
     <div className="space-y-6">
