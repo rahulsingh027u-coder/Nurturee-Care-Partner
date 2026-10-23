@@ -28,7 +28,8 @@ import {
   BookOpen,
   Sparkles,
 } from 'lucide-react';
-import { mockCareTasks, mockMedications } from '@/lib/care-partner-data';
+const mockCareTasks: any[] = [];
+const mockMedications: any[] = [];
 import type { TaskItem, MedicationLog } from '@/lib/care-partner-data';
 
 const categoryIconMap: Record<

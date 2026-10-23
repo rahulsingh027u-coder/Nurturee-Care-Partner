@@ -14,7 +14,7 @@ import {
   HandHeart,
   GraduationCap,
 } from 'lucide-react';
-import { mockPatients } from '@/lib/care-partner-data';
+const mockPatients: any[] = [];
 import type { Patient } from '@/lib/care-partner-data';
 import PatientDetailSheet from './PatientDetailSheet';
 import { getAvatarColor, getInitials, formatDate, careTypeLabel } from '@/lib/helpers';

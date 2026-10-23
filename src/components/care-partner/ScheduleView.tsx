@@ -15,7 +15,7 @@ import {
   AlertCircle,
   XCircle,
 } from 'lucide-react';
-import { mockShifts } from '@/lib/care-partner-data';
+const mockShifts: any[] = [];
 import type { Shift } from '@/lib/care-partner-data';
 import ShiftProgressBar from './ShiftProgressBar';
 import { format, addMonths, subMonths } from 'date-fns';

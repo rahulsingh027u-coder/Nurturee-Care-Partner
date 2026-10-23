@@ -48,7 +48,9 @@ import {
   PhoneCall,
   Siren,
 } from 'lucide-react';
-import { mockCarePartner, mockShifts, mockReviews } from '@/lib/care-partner-data';
+const mockCarePartner: any = {};
+const mockShifts: any[] = [];
+const mockReviews: any[] = [];
 import SOSEmergencyDialog from './SOSEmergencyDialog';
 import { getStoredOnboarding, SKILLS_CATALOG, SERVICES_CATALOG } from '@/lib/onboarding-data';
 import type { SkillLevel } from '@/lib/onboarding-data';

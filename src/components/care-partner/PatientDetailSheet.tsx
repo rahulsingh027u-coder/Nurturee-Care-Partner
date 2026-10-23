@@ -20,7 +20,8 @@ import {
   Pencil,
   CheckCircle,
 } from 'lucide-react';
-import { mockPatients, mockCareTasks } from '@/lib/care-partner-data';
+const mockPatients: any[] = [];
+const mockCareTasks: any[] = [];
 import type { Patient } from '@/lib/care-partner-data';
 import { getAvatarColor, getInitials, formatDate, careTypeLabel } from '@/lib/helpers';
 
