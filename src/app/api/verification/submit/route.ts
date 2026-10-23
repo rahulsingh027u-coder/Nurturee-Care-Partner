@@ -12,6 +12,14 @@ export async function POST(req: NextRequest) {
     const { partner } = auth;
 
     const { package: pkg, documents } = await req.json();
+    if (!pkg || typeof pkg !== 'string') return NextResponse.json({ error: 'Package required' }, { status: 400 });
+    if (!Array.isArray(documents) || documents.length === 0) return NextResponse.json({ error: 'Documents required' }, { status: 400 });
+    if (documents.length > 10) return NextResponse.json({ error: 'Too many documents' }, { status: 400 });
+    // Validate each document
+    for (const doc of documents) {
+      if (!doc.type || typeof doc.type !== 'string') return NextResponse.json({ error: 'Document type required' }, { status: 400 });
+      if (doc.url && typeof doc.url === 'string' && doc.url.length > 1000000) return NextResponse.json({ error: 'Document too large' }, { status: 413 });
+    }
 
     if (!pkg || !documents || !Array.isArray(documents)) {
       return NextResponse.json(
