@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { RATE_LIMITS, getClientIP } from '@/lib/rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { saveOtp, isOtpRateLimited } from '@/lib/redis';
@@ -14,6 +15,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid 10-digit phone required' }, { status: 400 });
     }
 
+    // Rate limit: 3 OTP requests per 60 seconds per phone
+    const ip = getClientIP(req);
+    const ipLimit = await RATE_LIMITS.auth(ip);
+    if (!ipLimit.allowed) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+    }
     if (await isOtpRateLimited(phone)) {
       return NextResponse.json({ error: 'Please wait 30 seconds before requesting another OTP' }, { status: 429 });
     }

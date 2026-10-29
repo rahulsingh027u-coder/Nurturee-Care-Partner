@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { RATE_LIMITS, getClientIP } from '@/lib/rate-limit';
 import { db } from '@/lib/db';
 import { createPartnerToken } from '@/lib/auth';
 import { getOtp, deleteOtp, saveOtp } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 10 verify attempts per 5 minutes per phone
+    const ip = getClientIP(req);
+    const ipLimit = await RATE_LIMITS.auth(ip);
+    if (!ipLimit.allowed) {
+      return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+    }
     const { phone, otp } = await req.json();
 
     if (!phone || !otp) {
